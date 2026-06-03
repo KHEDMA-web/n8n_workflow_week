@@ -1,0 +1,58 @@
+# Jour 1 — WhatsApp Manager 🤖
+
+Un assistant WhatsApp propulsé par l'IA qui gère tous les types de messages que tes clients envoient : texte, vocal, image et vidéo. Il comprend, garde le contexte de la conversation en mémoire, répond instantanément, et passe la main à un humain quand c'est nécessaire.
+
+## ✨ Ce que fait ce workflow
+
+- **Texte** → comprend et répond
+- **Audio / vocal** → transcrit puis répond
+- **Image** → analyse le contenu (et lit le texte dedans) puis répond
+- **Vidéo** → décrit le contenu puis répond
+- **Mémoire de conversation** → se souvient des échanges précédents par utilisateur
+- **AI Agent** → génère des réponses contextuelles
+
+## 🧱 Stack utilisée
+
+- n8n (orchestration)
+- API WhatsApp Business (réception et envoi des messages)
+- Modèle IA multimodal pour traiter audio / image / vidéo
+- AI Agent avec mémoire (Window Buffer Memory)
+
+## 🚀 Installation
+
+### 1. Importer le workflow
+Dans n8n : nouveau workflow → menu **(...)** en haut à droite → **Import from File** → sélectionne `workflow.json`.
+
+### 2. Configurer l'API WhatsApp Business
+Tu auras besoin d'un compte Meta for Developers avec WhatsApp Business API configuré. Suis la [documentation officielle n8n](https://docs.n8n.io/integrations/builtin/trigger-nodes/n8n-nodes-base.whatsapptrigger).
+
+Renseigne tes credentials dans :
+- le node **WhatsApp Trigger**
+- les nodes **WhatsApp** (Get Media URL, Download, Respond to User)
+
+### 3. Configurer le modèle IA
+Le workflow utilise un modèle multimodal pour traiter audio, image et vidéo. Ajoute ta clé API dans les nodes correspondants.
+
+### 4. Adapter le system prompt
+Dans le node **AI Agent**, modifie le `systemMessage` pour ton cas d'usage. Exemple pour un support client :
+
+```
+You are the customer assistant for [Business Name].
+Help clients with questions about services, prices, and bookings.
+Be warm, concise, and hand off to a human when the request is complex.
+Reply in the same language the client uses.
+```
+
+### 5. Activer le workflow
+⚠️ **Important :** le workflow doit être activé (toggle en haut à droite) pour recevoir les messages WhatsApp. Si tu es en self-hosted, assure-toi que ton serveur est accessible depuis internet.
+
+## 💡 Idées d'adaptation
+
+- Brancher une base Supabase pour logger toutes les conversations
+- Ajouter une notification (Telegram, email) quand un humain doit prendre le relais
+- Connecter une base de FAQ pour des réponses plus précises
+- Gérer plusieurs langues automatiquement
+
+## ⚠️ Crédits
+
+Adapté à partir d'un template de la communauté n8n. Les clés API ne sont pas incluses — ajoute les tiennes.

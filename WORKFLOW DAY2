@@ -1,0 +1,144 @@
+{
+  "name": "Smart Inbox Classifier — Claude + Telegram Alerts (by Anis Khelifi)",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": { "item": [{ "mode": "everyMinute", "minute": 5 }] },
+        "simple": false,
+        "filters": { "readStatus": "unread" }
+      },
+      "id": "trigger-gmail",
+      "name": "Gmail: New Email",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "try {\n const e = $input.first().json;\n return [{ json: { messageId: e.id || '', from: e.from?.value?.[0]?.address || '', fromName: e.from?.value?.[0]?.name || '', subject: e.subject || '', snippet: (e.snippet || '').substring(0, 500), date: e.date || new Date().toISOString() } }];\n} catch (e) {\n throw new Error('Failed to parse email: ' + e.message);\n}"
+      },
+      "id": "parse",
+      "name": "Parse Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "YOUR_ANTHROPIC_API_KEY" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-5\",\n  \"max_tokens\": 300,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(\"You are an email triage assistant. Classify this email into exactly one category: urgent, important, informational, or spam. Then write a one-sentence summary IN THE SAME LANGUAGE as the email (French, Arabic, English or Spanish). Respond ONLY with valid JSON, no other text: {\\\"category\\\": \\\"...\\\", \\\"summary\\\": \\\"...\\\", \\\"language\\\": \\\"...\\\"}\\n\\nFrom: \" + $json.fromName + \" <\" + $json.from + \">\\nSubject: \" + $json.subject + \"\\n\\n\" + $json.snippet) }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "ai-classify",
+      "name": "Claude: Classify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 400],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $('Parse Email').first().json;\nconst aiRaw = $input.first().json;\nlet ai;\ntry {\n  const text = aiRaw.content?.[0]?.text || '{}';\n  ai = JSON.parse(text);\n} catch(e) {\n  ai = { category: 'informational', summary: '', language: 'unknown' };\n}\nreturn [{ json: { ...email, category: ai.category || 'informational', summary: ai.summary || '', language: ai.language || 'unknown', classifiedAt: new Date().toISOString() } }];"
+      },
+      "id": "merge",
+      "name": "Merge Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 400]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Inbox Log", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{ $json.date }}",
+            "From": "={{ $json.from }}",
+            "Subject": "={{ $json.subject }}",
+            "Category": "={{ $json.category }}",
+            "Language": "={{ $json.language }}",
+            "Summary": "={{ $json.summary }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-sheets",
+      "name": "Log to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1080, 400],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "leftValue": "", "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "operator": { "type": "string", "operation": "equals" },
+              "leftValue": "={{ $json.category }}",
+              "rightValue": "urgent"
+            }
+          ]
+        }
+      },
+      "id": "if-urgent",
+      "name": "If Urgent",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1300, 400]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=🚨 URGENT EMAIL\n\nFrom: {{ $json.fromName }} ({{ $json.from }})\nSubject: {{ $json.subject }}\n\n{{ $json.summary }}",
+        "additionalFields": {}
+      },
+      "id": "telegram-alert",
+      "name": "Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1540, 320]
+    },
+    {
+      "parameters": {
+        "content": "## Smart Inbox Classifier\n### Améliorations par Anis Khelifi\n\nVersion enrichie du classifier InboxZero :\n\n1. Classification par Claude (au lieu d'OpenAI)\n2. Support multilingue (FR / AR / EN / ES) — résumé dans la langue de l'email\n3. Alerte Telegram instantanée pour chaque email URGENT\n\nGmail → Parse → Claude → Log Sheets → si urgent → Telegram",
+        "width": 360,
+        "height": 220,
+        "color": 4
+      },
+      "id": "note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [120, 140]
+    }
+  ],
+  "connections": {
+    "Gmail: New Email": { "main": [[{ "node": "Parse Email", "type": "main", "index": 0 }]] },
+    "Parse Email": { "main": [[{ "node": "Claude: Classify", "type": "main", "index": 0 }]] },
+    "Claude: Classify": { "main": [[{ "node": "Merge Result", "type": "main", "index": 0 }]] },
+    "Merge Result": { "main": [[{ "node": "Log to Sheets", "type": "main", "index": 0 }]] },
+    "Log to Sheets": { "main": [[{ "node": "If Urgent", "type": "main", "index": 0 }]] },
+    "If Urgent": { "main": [[{ "node": "Telegram Alert", "type": "main", "index": 0 }], []] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "meta": { "instanceId": "smart-inbox-anis-v1" }
+}

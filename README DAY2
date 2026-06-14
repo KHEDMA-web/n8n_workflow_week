@@ -1,0 +1,77 @@
+# Jour 2 — Smart Inbox Classifier 📬
+
+Un classificateur d'emails intelligent propulsé par Claude (Anthropic) qui trie automatiquement ta boîte Gmail, log chaque email dans Google Sheets, et t'envoie une alerte Telegram instantanée pour les emails urgents.
+
+Version enrichie du template InboxZero de la communauté n8n — adaptée et améliorée par Anis Khelifi.
+
+## ✨ Ce que fait ce workflow
+
+- **Réception Gmail** → surveille ta boîte et récupère les nouveaux emails non lus toutes les minutes
+- **Parsing** → extrait proprement l'expéditeur, le sujet, le snippet et la date
+- **Classification IA (Claude)** → classe chaque email dans une des 4 catégories : `urgent`, `important`, `informational`, `spam`
+- **Résumé multilingue** → génère un résumé en une phrase dans la langue de l'email (FR / AR / EN / ES)
+- **Log Google Sheets** → enregistre chaque email avec sa catégorie, langue et résumé dans un tableur
+- **Alerte Telegram** → envoie une notification instantanée sur Telegram uniquement pour les emails `urgent`
+
+## 🧱 Stack utilisée
+
+- n8n (orchestration)
+- Gmail Trigger (réception des emails)
+- Claude claude-sonnet-4-5 via API Anthropic (classification + résumé)
+- Google Sheets (log des emails)
+- Telegram Bot (alertes urgentes)
+
+## 🚀 Installation
+
+### 1. Importer le workflow
+Dans n8n : nouveau workflow → menu **(...)** en haut à droite → **Import from File** → sélectionne `WORKFLOW DAY2`.
+
+### 2. Remplacer les 4 placeholders
+
+Dans le fichier JSON, remplace ces valeurs avant d'importer (ou directement dans n8n après import) :
+
+| Placeholder | Valeur à renseigner |
+|-------------|---------------------|
+| `YOUR_ANTHROPIC_API_KEY` | Ta clé API Claude (console.anthropic.com) |
+| `YOUR_GOOGLE_SHEET_ID` | L'ID de ton Google Sheet (dans l'URL) |
+| `YOUR_TELEGRAM_CHAT_ID` | Ton chat ID Telegram |
+
+### 3. Préparer Google Sheets
+Crée un Google Sheet avec une feuille nommée **"Inbox Log"** et les colonnes suivantes dans l'ordre :
+
+```
+Date | From | Subject | Category | Language | Summary
+```
+
+### 4. Configurer les credentials dans n8n
+- **Gmail Trigger** → connecte ton compte Gmail avec OAuth2
+- **Google Sheets** → connecte ton compte Google
+- **Telegram** → ajoute le token de ton bot Telegram
+
+### 5. Créer un bot Telegram (si pas encore fait)
+Parle à [@BotFather](https://t.me/BotFather) sur Telegram :
+1. `/newbot` → donne un nom et un username
+2. Copie le token → colle-le dans les credentials Telegram de n8n
+3. Ton chat ID : envoie un message à ton bot, puis consulte `https://api.telegram.org/bot<TON_TOKEN>/getUpdates`
+
+### 6. Activer le workflow
+Toggle en haut à droite dans n8n. Le workflow poll Gmail toutes les minutes pour les emails non lus.
+
+## 💡 Idées d'adaptation
+
+- Ajouter une catégorie `newsletter` et les archiver automatiquement
+- Brancher Notion à la place de Google Sheets
+- Ajouter plusieurs niveaux d'alerte (urgent → Telegram, important → email récap quotidien)
+- Connecter un deuxième compte Gmail pour surveiller une boîte partagée
+
+## 📋 Structure du workflow
+
+```
+Gmail Trigger → Parse Email → Claude: Classify → Merge Result → Log to Sheets → If Urgent → Telegram Alert
+```
+
+## ⚠️ Crédits
+
+Adapté et enrichi à partir du template InboxZero de la communauté n8n.
+Améliorations : modèle Claude (Anthropic), support multilingue (FR/AR/EN/ES), alerte Telegram pour emails urgents.
+Les clés API ne sont pas incluses — ajoute les tiennes.

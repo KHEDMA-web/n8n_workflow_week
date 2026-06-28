@@ -17,7 +17,7 @@ Je suis **Anis Khelifi**, développeur full-stack et spécialiste en automatisat
 |------|----------|-------------|
 | 1 | [WhatsApp Manager](./jour-1-whatsapp-manager) | Assistant WhatsApp IA multi-format (texte, audio, image, vidéo) |
 | 2 | Smart Inbox Classifier | Triage Gmail par Claude — catégorisation, résumé multilingue, alerte Telegram urgente |
-| 3 | Email Auto-Reply | *(bientôt)* |
+| 3 | Relances Clients Automatiques | Relances Gmail personnalisées par Claude — délai intelligent, max 3 tentatives, notification Telegram |
 | 4 | Relances clients | *(bientôt)* |
 | 5 | Rapports quotidiens | *(bientôt)* |
 | 6 | Onboarding client | *(bientôt)* |

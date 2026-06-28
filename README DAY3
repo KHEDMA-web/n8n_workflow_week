@@ -1,0 +1,86 @@
+# Jour 3 — Relances Clients Automatiques 🔁
+
+Un système de relance commerciale intelligent qui surveille ta liste de prospects dans Google Sheets, génère des emails personnalisés avec Claude, les envoie via Gmail, et te notifie sur Telegram. Il n'oublie jamais un prospect.
+
+## ✨ Ce que fait ce workflow
+
+- **Déclenchement automatique** → tourne chaque matin du lundi au vendredi à 8h
+- **Lecture des prospects** → récupère la liste depuis Google Sheets
+- **Filtrage intelligent** → identifie les prospects à relancer selon leur délai :
+  - Relance 1 : après 3 jours sans réponse
+  - Relance 2 : après 5 jours supplémentaires
+  - Relance 3 : après 7 jours supplémentaires
+- **Rédaction IA (Claude)** → génère un email personnalisé pour chaque prospect (prénom, entreprise, besoin, ton chaleureux)
+- **Envoi Gmail** → expédie la relance directement depuis ton compte
+- **Mise à jour Sheets** → met à jour la date de contact, le compteur de relances et le statut
+- **Notification Telegram** → te confirme chaque relance envoyée (ou t'informe s'il n'y a rien à faire)
+- **Limite 3 relances** → après 3 tentatives, le prospect passe automatiquement en statut `max-relances`
+
+## 🧱 Stack utilisée
+
+- n8n (orchestration + scheduling)
+- Google Sheets (CRM léger — liste des prospects)
+- Claude claude-sonnet-4-5 via API Anthropic (rédaction personnalisée)
+- Gmail (envoi des relances)
+- Telegram Bot (notifications)
+
+## 🚀 Installation
+
+### 1. Importer le workflow
+Dans n8n : nouveau workflow → menu **(...)** en haut à droite → **Import from File** → sélectionne `WORKFLOW DAY3`.
+
+### 2. Préparer ton Google Sheet
+Crée un Google Sheet avec une feuille nommée **"Prospects"** et ces colonnes exactes :
+
+| Prénom | Nom | Email | Entreprise | Besoin | Statut | Dernier contact | Nb relances |
+|--------|-----|-------|------------|--------|--------|-----------------|-------------|
+| Karim | Benali | karim@example.com | Acme | Site web | en cours | 2025-01-10 | 0 |
+
+Valeurs possibles pour **Statut** : `en cours`, `gagné`, `perdu`, `stop`, `max-relances`
+
+> Les statuts `gagné`, `perdu` et `stop` sont exclus automatiquement des relances.
+
+### 3. Remplacer les 3 placeholders
+
+| Placeholder | Valeur à renseigner |
+|-------------|---------------------|
+| `YOUR_ANTHROPIC_API_KEY` | Ta clé API Claude (console.anthropic.com) |
+| `YOUR_GOOGLE_SHEET_ID` | L'ID de ton Google Sheet (dans l'URL) |
+| `YOUR_TELEGRAM_CHAT_ID` | Ton chat ID Telegram |
+
+### 4. Configurer les credentials dans n8n
+- **Google Sheets** → connecte ton compte Google (OAuth2)
+- **Gmail** → connecte ton compte Gmail (OAuth2)
+- **Telegram** → ajoute le token de ton bot Telegram
+
+### 5. Activer le workflow
+Toggle en haut à droite dans n8n. Le workflow se lancera chaque matin à 8h (lundi au vendredi).
+
+> Pour tester immédiatement sans attendre 8h : clique sur **Execute Workflow** manuellement.
+
+## 💡 Idées d'adaptation
+
+- Ajouter une colonne "Langue" dans le Sheet pour que Claude rédige dans la bonne langue
+- Connecter Notion à la place de Google Sheets
+- Ajouter un node pour archiver les prospects `max-relances` dans un onglet séparé
+- Envoyer un récap quotidien (nombre de relances envoyées, taux de réponse)
+- Brancher un webhook pour mettre à jour le statut quand le prospect répond
+
+## 📋 Structure du workflow
+
+```
+Schedule (8h lun-ven)
+  → Lire prospects (Sheets)
+    → Filtrer (délai 3j / 5j / 7j, max 3 relances)
+      → [Oui] Claude: rédiger email personnalisé
+                → Gmail: envoyer
+                  → Sheets: mettre à jour date + compteur
+                    → Telegram: notifier
+      → [Non]  Telegram: rien à faire aujourd'hui
+```
+
+## ⚠️ Notes
+
+- Les clés API ne sont pas incluses — ajoute les tiennes.
+- Le workflow respecte la limite de 3 relances par prospect pour ne pas spammer.
+- Assure-toi que ton instance n8n est active (self-hosted) ou que ton compte cloud est actif pour que le scheduler fonctionne.

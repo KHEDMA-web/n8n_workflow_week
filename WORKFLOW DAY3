@@ -1,0 +1,190 @@
+{
+  "name": "Relances Clients Automatiques — Claude + Gmail + Sheets (by Anis Khelifi)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 8 * * 1-5" }]
+        }
+      },
+      "id": "trigger-schedule",
+      "name": "Tous les matins (lun-ven)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 400]
+    },
+    {
+      "parameters": {
+        "operation": "readAllRows",
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Prospects", "mode": "name" },
+        "options": {}
+      },
+      "id": "read-prospects",
+      "name": "Lire les prospects",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [420, 400],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all();\nconst today = new Date();\nconst toFollow = [];\n\nfor (const row of rows) {\n  const d = row.json;\n  if (!d.Email || !d.Statut) continue;\n  if (d.Statut === 'gagné' || d.Statut === 'perdu' || d.Statut === 'stop') continue;\n\n  const lastContact = d['Dernier contact'] ? new Date(d['Dernier contact']) : null;\n  const followCount = parseInt(d['Nb relances'] || '0', 10);\n  const delayDays = followCount === 0 ? 3 : followCount === 1 ? 5 : 7;\n\n  if (!lastContact) {\n    toFollow.push({ json: { ...d, followCount, rowIndex: d.__rowIndex } });\n    continue;\n  }\n\n  const diffDays = Math.floor((today - lastContact) / (1000 * 60 * 60 * 24));\n  if (diffDays >= delayDays && followCount < 3) {\n    toFollow.push({ json: { ...d, followCount, diffDays, rowIndex: d.__rowIndex } });\n  }\n}\n\nif (toFollow.length === 0) return [{ json: { skip: true, message: 'Aucune relance à envoyer aujourd\\'hui.' } }];\nreturn toFollow;"
+      },
+      "id": "filter-prospects",
+      "name": "Filtrer prospects à relancer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "operator": { "type": "boolean", "operation": "false" },
+              "leftValue": "={{ $json.skip }}"
+            }
+          ]
+        }
+      },
+      "id": "if-has-prospects",
+      "name": "Y a-t-il des relances ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [860, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "YOUR_ANTHROPIC_API_KEY" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-5\",\n  \"max_tokens\": 400,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(\"Tu es un assistant commercial. Rédige un email de relance court, chaleureux et professionnel pour le prospect suivant. C'est la relance numéro \" + ($json.followCount + 1) + \"/3. L'email doit être dans la langue du prospect si connue, sinon en français. Signe en tant qu'Anis Khelifi.\\n\\nNe mets PAS d'objet dans ta réponse. Réponds UNIQUEMENT avec le corps de l'email en texte brut.\\n\\nProspect:\\n- Prénom: \" + ($json.Prénom || 'Prospect') + \"\\n- Entreprise: \" + ($json.Entreprise || 'son entreprise') + \"\\n- Besoin: \" + ($json.Besoin || 'non précisé') + \"\\n- Dernier contact: il y a \" + ($json.diffDays || 'quelques') + \" jours\") }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "claude-draft",
+      "name": "Claude: Rédiger la relance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 320],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const prospect = $('Filtrer prospects à relancer').first().json;\nconst aiRaw = $input.first().json;\nconst body = aiRaw.content?.[0]?.text || '';\nconst followCount = prospect.followCount || 0;\nconst subjects = [\n  `Suite à notre échange — ${prospect.Entreprise || ''}`,\n  `Toujours disponible pour vous aider — ${prospect.Prénom || 'Bonjour'}`,\n  `Dernière tentative de contact — ${prospect.Entreprise || ''}`\n];\nreturn [{ json: {\n  ...prospect,\n  emailBody: body,\n  subject: subjects[followCount] || subjects[0],\n  newFollowCount: followCount + 1,\n  sentAt: new Date().toISOString()\n} }];"
+      },
+      "id": "build-email",
+      "name": "Construire l'email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 320]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Email }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.emailBody }}",
+        "options": {}
+      },
+      "id": "send-email",
+      "name": "Gmail: Envoyer la relance",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1520, 320],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Prospects", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Dernier contact": "={{ $now.format('yyyy-MM-dd') }}",
+            "Nb relances": "={{ $json.newFollowCount }}",
+            "Statut": "={{ $json.newFollowCount >= 3 ? 'max-relances' : $json.Statut }}"
+          },
+          "matchingColumns": ["Email"]
+        },
+        "options": {}
+      },
+      "id": "update-sheet",
+      "name": "Mettre à jour le Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1740, 320],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=📤 Relance {{ $json.newFollowCount }}/3 envoyée\n\n👤 {{ $json.Prénom }} {{ $json.Nom || '' }} — {{ $json.Entreprise || 'N/A' }}\n📧 {{ $json.Email }}\n📝 {{ $json.subject }}",
+        "additionalFields": {}
+      },
+      "id": "telegram-notify",
+      "name": "Telegram: Notifier",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1960, 320]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=✅ Relances du jour terminées — aucun prospect à relancer aujourd'hui.",
+        "additionalFields": {}
+      },
+      "id": "telegram-skip",
+      "name": "Telegram: Rien à faire",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1080, 520]
+    },
+    {
+      "parameters": {
+        "content": "## Relances Clients Automatiques\n### by Anis Khelifi\n\nChaque matin (lun-ven à 8h) :\n1. Lit la liste des prospects dans Google Sheets\n2. Filtre ceux à relancer (délai 3j / 5j / 7j selon nb de relances)\n3. Claude rédige un email personnalisé\n4. Gmail envoie la relance\n5. Sheet mis à jour + notification Telegram\n\nMax 3 relances par prospect, puis statut → 'max-relances'",
+        "width": 380,
+        "height": 250,
+        "color": 5
+      },
+      "id": "note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [120, 120]
+    }
+  ],
+  "connections": {
+    "Tous les matins (lun-ven)": { "main": [[{ "node": "Lire les prospects", "type": "main", "index": 0 }]] },
+    "Lire les prospects": { "main": [[{ "node": "Filtrer prospects à relancer", "type": "main", "index": 0 }]] },
+    "Filtrer prospects à relancer": { "main": [[{ "node": "Y a-t-il des relances ?", "type": "main", "index": 0 }]] },
+    "Y a-t-il des relances ?": {
+      "main": [
+        [{ "node": "Claude: Rédiger la relance", "type": "main", "index": 0 }],
+        [{ "node": "Telegram: Rien à faire", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude: Rédiger la relance": { "main": [[{ "node": "Construire l'email", "type": "main", "index": 0 }]] },
+    "Construire l'email": { "main": [[{ "node": "Gmail: Envoyer la relance", "type": "main", "index": 0 }]] },
+    "Gmail: Envoyer la relance": { "main": [[{ "node": "Mettre à jour le Sheet", "type": "main", "index": 0 }]] },
+    "Mettre à jour le Sheet": { "main": [[{ "node": "Telegram: Notifier", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "meta": { "instanceId": "relances-clients-anis-v1" }
+}

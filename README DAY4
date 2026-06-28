@@ -1,0 +1,90 @@
+# Jour 4 — Rapport Quotidien IA 📊
+
+Un système qui génère automatiquement chaque soir un rapport de synthèse de ta journée business : état du pipeline prospects, emails reçus, actions prioritaires pour demain — rédigé par Claude et livré sur Telegram + Gmail.
+
+## ✨ Ce que fait ce workflow
+
+- **Déclenchement automatique** → chaque soir à 18h du lundi au vendredi
+- **Lecture des données** → récupère en parallèle :
+  - Onglet **Prospects** : état du pipeline CRM (en cours, gagnés, perdus, relancés aujourd'hui)
+  - Onglet **Inbox Log** : emails reçus dans la journée (urgent, important, spam, info)
+- **Agrégation** → calcule les stats du jour automatiquement
+- **Rapport IA (Claude)** → génère un résumé motivant avec points clés + 1 action prioritaire pour le lendemain
+- **Double envoi** → rapport reçu sur Telegram ET par email Gmail
+- **Archivage Sheets** → chaque rapport est loggé dans l'onglet **Rapports** pour suivre l'évolution semaine après semaine
+
+## 🧱 Stack utilisée
+
+- n8n (orchestration + scheduling)
+- Google Sheets (données Prospects + Inbox Log + Rapports)
+- Claude claude-sonnet-4-5 via API Anthropic (rédaction du rapport)
+- Telegram Bot (réception instantanée)
+- Gmail (copie email)
+
+## 🚀 Installation
+
+### 1. Importer le workflow
+Dans n8n : nouveau workflow → menu **(...)** → **Import from File** → sélectionne `WORKFLOW DAY4`.
+
+### 2. Préparer Google Sheets
+Le workflow utilise 3 onglets dans le **même Google Sheet** :
+
+**Onglet "Prospects"** (créé au Jour 3) :
+```
+Prénom | Nom | Email | Entreprise | Besoin | Statut | Dernier contact | Nb relances
+```
+
+**Onglet "Inbox Log"** (créé au Jour 2) :
+```
+Date | From | Subject | Category | Language | Summary
+```
+
+**Onglet "Rapports"** (nouveau — à créer) :
+```
+Date | Prospects total | En cours | Gagnés | Relances du jour | Emails du jour | Urgents | Rapport IA
+```
+
+### 3. Remplacer les 4 placeholders
+
+| Placeholder | Valeur à renseigner |
+|-------------|---------------------|
+| `YOUR_ANTHROPIC_API_KEY` | Ta clé API Claude (console.anthropic.com) |
+| `YOUR_GOOGLE_SHEET_ID` | L'ID de ton Google Sheet (le même que Jour 2 et 3) |
+| `YOUR_TELEGRAM_CHAT_ID` | Ton chat ID Telegram |
+| `YOUR_EMAIL` | Ton adresse email pour recevoir le rapport |
+
+### 4. Configurer les credentials dans n8n
+- **Google Sheets** → compte Google (OAuth2)
+- **Telegram** → token du bot Telegram
+- **Gmail** → compte Gmail (OAuth2)
+
+### 5. Activer le workflow
+Toggle en haut à droite. Le rapport part chaque soir à 18h.
+
+> Pour tester : clique sur **Execute Workflow** manuellement. Si les onglets Prospects et Inbox Log sont vides, le rapport sera généré avec des stats à zéro — c'est normal.
+
+## 💡 Idées d'adaptation
+
+- Ajouter un onglet "Revenus" dans Sheets et inclure le CA du jour dans le rapport
+- Connecter Notion pour archiver les rapports dans une base de données
+- Ajouter une section "Tâches terminées" en lisant un onglet TODO
+- Envoyer un récap hebdomadaire le vendredi soir avec les stats de la semaine
+- Adapter le prompt Claude pour ton secteur (agence, SaaS, e-commerce, etc.)
+
+## 📋 Structure du workflow
+
+```
+Schedule (18h lun-ven)
+  ├── Lire Prospects (Sheets)  ─┐
+  └── Lire Inbox Log (Sheets)  ─┴→ Agréger → Claude: rapport
+                                        ↓
+                              Telegram + Gmail (envoi parallèle)
+                                        ↓
+                              Log Rapports (Sheets)
+```
+
+## ⚠️ Notes
+
+- Ce workflow fonctionne en synergie avec Jour 2 (Inbox Log) et Jour 3 (Prospects CRM).
+- Les données sont issues du même Google Sheet — utilise le même `YOUR_GOOGLE_SHEET_ID`.
+- Les clés API ne sont pas incluses — ajoute les tiennes.

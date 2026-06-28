@@ -1,0 +1,193 @@
+{
+  "name": "Rapport Quotidien IA — Claude + Sheets + Telegram (by Anis Khelifi)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 18 * * 1-5" }]
+        }
+      },
+      "id": "trigger-schedule",
+      "name": "Chaque soir à 18h (lun-ven)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 400]
+    },
+    {
+      "parameters": {
+        "operation": "readAllRows",
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Prospects", "mode": "name" },
+        "options": {}
+      },
+      "id": "read-prospects",
+      "name": "Lire Prospects",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [420, 280],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "operation": "readAllRows",
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Inbox Log", "mode": "name" },
+        "options": {}
+      },
+      "id": "read-inbox",
+      "name": "Lire Inbox Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [420, 520],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date().toISOString().split('T')[0];\n\n// Prospects stats\nconst prospects = $('Lire Prospects').all().map(r => r.json);\nconst total = prospects.length;\nconst gagnes = prospects.filter(p => p.Statut === 'gagné').length;\nconst enCours = prospects.filter(p => p.Statut === 'en cours').length;\nconst perdus = prospects.filter(p => p.Statut === 'perdu').length;\nconst maxRelances = prospects.filter(p => p.Statut === 'max-relances').length;\nconst relancesAujourdhui = prospects.filter(p => (p['Dernier contact'] || '').startsWith(today)).length;\n\n// Inbox stats\nconst emails = $('Lire Inbox Log').all().map(r => r.json);\nconst emailsToday = emails.filter(e => (e.Date || '').startsWith(today));\nconst urgents = emailsToday.filter(e => e.Category === 'urgent').length;\nconst importants = emailsToday.filter(e => e.Category === 'important').length;\nconst spams = emailsToday.filter(e => e.Category === 'spam').length;\nconst infos = emailsToday.filter(e => e.Category === 'informational').length;\n\nreturn [{ json: {\n  date: today,\n  prospects: { total, gagnes, enCours, perdus, maxRelances, relancesAujourdhui },\n  emails: { total: emailsToday.length, urgents, importants, spams, infos }\n} }];"
+      },
+      "id": "aggregate",
+      "name": "Agréger les données",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "YOUR_ANTHROPIC_API_KEY" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-5\",\n  \"max_tokens\": 600,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(\"Tu es l'assistant business d'Anis Khelifi, développeur freelance. Rédige un rapport de fin de journée court, direct et motivant en français, en te basant sur ces données du \" + $json.date + \".\\n\\n📊 PROSPECTS CRM :\\n- Total prospects : \" + $json.prospects.total + \"\\n- En cours : \" + $json.prospects.enCours + \"\\n- Gagnés : \" + $json.prospects.gagnes + \"\\n- Perdus : \" + $json.prospects.perdus + \"\\n- Max relances : \" + $json.prospects.maxRelances + \"\\n- Relancés aujourd'hui : \" + $json.prospects.relancesAujourdhui + \"\\n\\n📬 EMAILS DU JOUR :\\n- Total reçus : \" + $json.emails.total + \"\\n- Urgents : \" + $json.emails.urgents + \"\\n- Importants : \" + $json.emails.importants + \"\\n- Informationnels : \" + $json.emails.infos + \"\\n- Spams filtrés : \" + $json.emails.spams + \"\\n\\nFormat souhaité : commence par une ligne de résumé de la journée, puis les points clés, puis 1 action prioritaire pour demain. Sois concis (max 200 mots). Utilise des emojis pour structurer.\") }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "claude-report",
+      "name": "Claude: Générer le rapport",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 400],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const stats = $('Agréger les données').first().json;\nconst aiRaw = $input.first().json;\nconst report = aiRaw.content?.[0]?.text || 'Rapport non disponible.';\nreturn [{ json: { ...stats, report } }];"
+      },
+      "id": "build-report",
+      "name": "Construire le rapport",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 400]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=📊 *Rapport du {{ $json.date }}*\n\n{{ $json.report }}\n\n---\n_Généré automatiquement par ton assistant n8n + Claude_",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "telegram-report",
+      "name": "Telegram: Envoyer le rapport",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1320, 400],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "sendTo": "YOUR_EMAIL",
+        "subject": "=📊 Rapport du {{ $json.date }} — Anis Business",
+        "message": "={{ $json.report }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "email-report",
+      "name": "Gmail: Envoyer le rapport",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1320, 560],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Rapports", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{ $json.date }}",
+            "Prospects total": "={{ $json.prospects.total }}",
+            "En cours": "={{ $json.prospects.enCours }}",
+            "Gagnés": "={{ $json.prospects.gagnes }}",
+            "Relances du jour": "={{ $json.prospects.relancesAujourdhui }}",
+            "Emails du jour": "={{ $json.emails.total }}",
+            "Urgents": "={{ $json.emails.urgents }}",
+            "Rapport IA": "={{ $json.report }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-report",
+      "name": "Log Rapport dans Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1540, 400],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "content": "## Rapport Quotidien IA\n### by Anis Khelifi\n\nChaque soir à 18h (lun-ven) :\n1. Lit les données Prospects + Inbox Log depuis Sheets\n2. Agrège les stats du jour\n3. Claude génère un rapport de synthèse\n4. Envoi Telegram + Gmail\n5. Log dans l'onglet Rapports\n\nPlaceholders à remplacer :\n- YOUR_ANTHROPIC_API_KEY\n- YOUR_GOOGLE_SHEET_ID\n- YOUR_TELEGRAM_CHAT_ID\n- YOUR_EMAIL",
+        "width": 380,
+        "height": 280,
+        "color": 3
+      },
+      "id": "note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [120, 120]
+    }
+  ],
+  "connections": {
+    "Chaque soir à 18h (lun-ven)": {
+      "main": [
+        [
+          { "node": "Lire Prospects", "type": "main", "index": 0 },
+          { "node": "Lire Inbox Log", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Lire Prospects": { "main": [[{ "node": "Agréger les données", "type": "main", "index": 0 }]] },
+    "Lire Inbox Log": { "main": [[{ "node": "Agréger les données", "type": "main", "index": 0 }]] },
+    "Agréger les données": { "main": [[{ "node": "Claude: Générer le rapport", "type": "main", "index": 0 }]] },
+    "Claude: Générer le rapport": { "main": [[{ "node": "Construire le rapport", "type": "main", "index": 0 }]] },
+    "Construire le rapport": {
+      "main": [
+        [
+          { "node": "Telegram: Envoyer le rapport", "type": "main", "index": 0 },
+          { "node": "Gmail: Envoyer le rapport", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Telegram: Envoyer le rapport": { "main": [[{ "node": "Log Rapport dans Sheets", "type": "main", "index": 0 }]] },
+    "Gmail: Envoyer le rapport": { "main": [[{ "node": "Log Rapport dans Sheets", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "meta": { "instanceId": "rapport-quotidien-anis-v1" }
+}

@@ -1,0 +1,100 @@
+# Jour 7 — Copilote Business IA 🤖✨
+
+Le workflow final de la série. Pas une automatisation passive comme les 6 jours précédents — un **véritable AI Agent conversationnel** que tu pilotes depuis Telegram, avec mémoire de conversation et accès à 5 outils qu'il choisit d'utiliser lui-même selon ta demande.
+
+C'est le point d'orchestration de toute la semaine : il consulte en temps réel les données générées par les workflows des Jours 2, 3, 5 et 6.
+
+## ✨ Ce que fait ce workflow
+
+Tu lui écris en langage naturel sur Telegram, il comprend et agit :
+
+| Tu écris | Il fait |
+|----------|---------|
+| "Où en est le projet Acme ?" | Consulte l'onglet **Projets**, répond avec l'avancement et l'échéance |
+| "Combien de prospects gagnés cette semaine ?" | Consulte l'onglet **Prospects**, calcule et répond |
+| "Relance Karim maintenant" | Rédige et **envoie réellement** un email via Gmail |
+| "Résume mes emails urgents du jour" | Consulte l'onglet **Inbox Log**, filtre et résume |
+| "Ce client est très énervé, que faire ?" | Évalue la situation et peut **t'alerter directement** sur Telegram si c'est critique |
+
+Contrairement aux jours précédents (un seul appel HTTP à Claude par exécution), ce workflow utilise le vrai **AI Agent** de n8n : Claude décide lui-même quel outil appeler, dans quel ordre, et combine les résultats avant de répondre.
+
+## 🧱 Stack utilisée
+
+- n8n (AI Agent + orchestration)
+- **Claude Sonnet 4.5** comme modèle de raisonnement (via le node Anthropic Chat Model)
+- **Window Buffer Memory** → mémoire de conversation par utilisateur Telegram
+- **5 outils connectés à l'agent** :
+  1. Google Sheets Tool — lecture Prospects
+  2. Google Sheets Tool — lecture Projets
+  3. Google Sheets Tool — lecture Inbox Log
+  4. Gmail Tool — envoi d'email réel
+  5. Telegram Tool — alerte directe à Anis en cas d'urgence
+- Telegram (trigger + réponse)
+
+## 🚀 Installation
+
+### 1. Importer le workflow
+Dans n8n : nouveau workflow → menu **(...)** → **Import from File** → sélectionne `WORKFLOW DAY7`.
+
+> ⚠️ Ce workflow utilise les nodes **LangChain** de n8n (AI Agent, Chat Model, Memory). Vérifie que ton instance n8n a bien les nodes IA activés (c'est le cas par défaut sur n8n Cloud et les versions récentes en self-hosted).
+
+### 2. Connecter les Google Sheets (les mêmes que les jours précédents)
+Ce workflow lit 3 onglets du **même Google Sheet** utilisé aux Jours 2, 3, 5 et 6 :
+- `Prospects` (Jour 3)
+- `Projets` (Jour 6)
+- `Inbox Log` (Jour 2)
+
+Aucune nouvelle structure à créer — l'agent lit ce qui existe déjà.
+
+### 3. Remplacer les 2 placeholders
+
+| Placeholder | Valeur à renseigner |
+|-------------|---------------------|
+| `YOUR_GOOGLE_SHEET_ID` | L'ID de ton Google Sheet (le même que les jours précédents) |
+| `YOUR_TELEGRAM_CHAT_ID` | Ton chat ID Telegram (pour l'outil "Alerter Anis") |
+
+### 4. Configurer les credentials dans n8n
+- **Anthropic Chat Model** → ta clé API Claude (console.anthropic.com)
+- **Google Sheets** (x3 outils) → compte Google (OAuth2)
+- **Gmail Tool** → compte Gmail (OAuth2)
+- **Telegram** (trigger + 2 outils) → token du bot Telegram
+
+### 5. Activer le workflow
+Toggle en haut à droite. Écris ensuite directement à ton bot Telegram pour commencer la conversation.
+
+> Premier test conseillé : "Salut, fais-moi un résumé de mon activité cette semaine."
+
+## 💡 Idées d'adaptation
+
+- Ajouter un outil "Créer un prospect" pour ajouter un lead directement depuis le chat
+- Connecter un Vector Store pour que l'agent retrouve des infos dans tes anciens emails/documents
+- Ajouter une étape de confirmation avant tout envoi d'email réel ("Tu confirmes l'envoi ?")
+- Brancher l'agent sur WhatsApp (Jour 1) en plus de Telegram
+- Donner à l'agent un outil de recherche web pour de la veille en direct
+
+## 📋 Structure du workflow
+
+```
+Message Telegram reçu
+        ↓
+  Copilote Business IA (AI Agent)
+   ├─ Claude Sonnet 4.5 (raisonnement)
+   ├─ Mémoire de conversation (par chat)
+   ├─ Outil: Lire Prospects
+   ├─ Outil: Lire Projets
+   ├─ Outil: Lire Inbox Log
+   ├─ Outil: Envoyer Email
+   └─ Outil: Alerter Anis (urgence)
+        ↓
+  Répondre sur Telegram
+```
+
+## ⚠️ Notes
+
+- L'agent n'envoie un email ou une alerte QUE si c'est explicitement demandé ou clairement justifié — le system prompt l'encadre pour éviter les actions non désirées.
+- Les clés API et credentials ne sont pas inclus — ajoute les tiens.
+- C'est le workflow le plus avancé de la série : prends le temps de tester en mode manuel avant de l'activer en continu.
+
+---
+
+🎉 **Fin de "La Semaine du Workflow"** — 7 jours, 7 automatisations, un business qui tourne (presque) tout seul.

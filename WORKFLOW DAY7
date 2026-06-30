@@ -1,0 +1,156 @@
+{
+  "name": "Copilote Business IA — AI Agent Claude + Sheets + Gmail + Telegram (by Anis Khelifi)",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "trigger-telegram",
+      "name": "Message Telegram reçu",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [200, 460]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-5",
+        "options": { "maxTokensToSample": 1024 }
+      },
+      "id": "lm-claude",
+      "name": "Claude Sonnet 4.5",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [420, 700],
+      "credentials": { "anthropicApi": { "id": "YOUR_ANTHROPIC_CREDENTIAL_ID", "name": "Anthropic account" } }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Message Telegram reçu').item.json.message.chat.id }}",
+        "contextWindowLength": 20
+      },
+      "id": "memory",
+      "name": "Mémoire de conversation",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [600, 700]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Prospects", "mode": "name" },
+        "operation": "getAllRows",
+        "toolDescription": "Consulte la liste des prospects et clients : statut (en cours, gagné, perdu), entreprise, besoin, dernier contact, nombre de relances. Utilise cet outil pour répondre à toute question sur le pipeline commercial."
+      },
+      "id": "tool-prospects",
+      "name": "Outil: Lire Prospects",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [780, 580]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Projets", "mode": "name" },
+        "operation": "getAllRows",
+        "toolDescription": "Consulte l'état des projets clients en cours : avancement (%), échéance, statut, retard éventuel. Utilise cet outil pour toute question sur l'avancement d'un projet."
+      },
+      "id": "tool-projets",
+      "name": "Outil: Lire Projets",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [960, 580]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Inbox Log", "mode": "name" },
+        "operation": "getAllRows",
+        "toolDescription": "Consulte l'historique des emails reçus et classés (urgent, important, info, spam). Utilise cet outil pour des questions sur les emails du jour ou de la semaine."
+      },
+      "id": "tool-inbox",
+      "name": "Outil: Lire Inbox Log",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [1140, 580]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "sendTo": "={{ $fromAI('to', 'Adresse email du destinataire') }}",
+        "subject": "={{ $fromAI('subject', 'Objet de l\\'email') }}",
+        "message": "={{ $fromAI('body', 'Corps de l\\'email en texte') }}",
+        "toolDescription": "Envoie un email réel via Gmail. N'utilise cet outil que si l'utilisateur demande explicitement d'envoyer ou de relancer un email (ex: 'relance Karim maintenant')."
+      },
+      "id": "tool-gmail",
+      "name": "Outil: Envoyer Email",
+      "type": "n8n-nodes-base.gmailTool",
+      "typeVersion": 2.1,
+      "position": [1320, 580]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "={{ $fromAI('alertText', 'Message d\\'alerte urgent à envoyer à Anis') }}",
+        "toolDescription": "Envoie une alerte Telegram directement à Anis (pas dans la conversation en cours) quand une situation nécessite une intervention humaine urgente : client très mécontent, projet gravement en retard, gros deal à risque."
+      },
+      "id": "tool-escalate",
+      "name": "Outil: Alerter Anis",
+      "type": "n8n-nodes-base.telegramTool",
+      "typeVersion": 1.2,
+      "position": [1500, 580]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message.text }}",
+        "systemMessage": "Tu es le Copilote Business IA d'Anis Khelifi, développeur full-stack freelance. Tu as accès en temps réel à son CRM (prospects), ses projets clients, sa boîte mail classée, et tu peux envoyer des emails ou l'alerter en urgence.\n\nTon rôle : répondre à ses questions sur son business et exécuter des actions simples quand il te le demande clairement (ex: 'relance Karim', 'envoie un mail à X').\n\nRègles :\n- Réponds toujours en français, de façon concise et directe (style chat, pas d'email formel sauf si tu rédiges un email).\n- Utilise les outils Sheets pour TOUTE question chiffrée (ne jamais inventer de chiffres).\n- N'envoie un email ou une alerte que si c'est explicitement demandé ou clairement nécessaire — jamais par défaut.\n- Si une info manque dans les Sheets, dis-le clairement plutôt que d'inventer.\n- Tu gardes le contexte de la conversation grâce à ta mémoire.",
+        "options": {}
+      },
+      "id": "agent-main",
+      "name": "Copilote Business IA",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.9,
+      "position": [780, 460]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Message Telegram reçu').item.json.message.chat.id }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "id": "telegram-reply",
+      "name": "Répondre sur Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1700, 460]
+    },
+    {
+      "parameters": {
+        "content": "## Copilote Business IA — le workflow final\n### by Anis Khelifi\n\nLa différence avec les 6 jours précédents : ici, ce n'est plus un simple appel API à Claude — c'est un vrai **AI Agent** avec mémoire de conversation ET accès à 5 outils qu'il choisit d'utiliser lui-même selon la question.\n\nTu lui écris sur Telegram :\n• \"Où en est le projet Acme ?\"\n• \"Combien de prospects gagnés cette semaine ?\"\n• \"Relance Karim maintenant\"\n• \"Résume mes emails urgents du jour\"\n\nIl va chercher dans Sheets, raisonne, et répond ou agit.\n\n⚠️ Credentials à configurer :\n- Anthropic API (Chat Model)\n- Google Sheets OAuth2 (x3 outils)\n- Gmail OAuth2 (outil email)\n- Telegram Bot (trigger + 2 sorties)\n\nC'est le point d'orchestration de toute la semaine : Jour 2 (Inbox), Jour 3 (Relances), Jour 5 (Onboarding), Jour 6 (Projets) deviennent des données que l'agent consulte et utilise en temps réel.",
+        "width": 460,
+        "height": 360,
+        "color": 4
+      },
+      "id": "note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [120, 80]
+    }
+  ],
+  "connections": {
+    "Message Telegram reçu": { "main": [[{ "node": "Copilote Business IA", "type": "main", "index": 0 }]] },
+    "Claude Sonnet 4.5": { "ai_languageModel": [[{ "node": "Copilote Business IA", "type": "ai_languageModel", "index": 0 }]] },
+    "Mémoire de conversation": { "ai_memory": [[{ "node": "Copilote Business IA", "type": "ai_memory", "index": 0 }]] },
+    "Outil: Lire Prospects": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Lire Projets": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Lire Inbox Log": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Envoyer Email": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Alerter Anis": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Copilote Business IA": { "main": [[{ "node": "Répondre sur Telegram", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "meta": { "instanceId": "copilote-business-anis-v1" }
+}

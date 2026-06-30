@@ -21,7 +21,7 @@ Je suis **Anis Khelifi**, développeur full-stack et spécialiste en automatisat
 | 4 | Rapport Quotidien IA | Synthèse automatique chaque soir — pipeline prospects + emails du jour + action prioritaire par Claude |
 | 5 | Onboarding Client Automatique | Email de bienvenue par Claude + fiche onboarding dès qu'un deal passe en "gagné" |
 | 6 | Suivi de Projet Client Automatique | Point d'avancement hebdo par Claude, alerte Telegram si projet en retard |
-| 7 | Veille concurrentielle | *(bientôt)* |
+| 7 | Copilote Business IA | AI Agent conversationnel sur Telegram — mémoire + 5 outils, orchestre tous les workflows précédents |
 
 ## ⚙️ Comment utiliser ces workflows
 

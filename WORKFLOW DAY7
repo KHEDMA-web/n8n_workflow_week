@@ -10,70 +10,320 @@
       "name": "Message Telegram reçu",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
-      "position": [200, 460]
+      "position": [180, 600]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "operator": { "type": "object", "operation": "exists" },
+              "leftValue": "={{ $json.message.voice }}",
+              "rightValue": ""
+            }
+          ]
+        }
+      },
+      "id": "if-voice",
+      "name": "Message vocal ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [400, 600]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileId": "={{ $json.message.voice.file_id }}"
+      },
+      "id": "telegram-get-file",
+      "name": "Télécharger le vocal",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [620, 500],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "YOUR_TRANSCRIPTION_SERVICE_URL",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "options": {},
+        "notes": "Branche ici le service de transcription audio de ton choix (Whisper API, AssemblyAI, etc.). Le binaire du vocal Telegram est disponible en entrée."
+      },
+      "id": "transcribe-voice",
+      "name": "Transcrire le vocal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 500],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "operator": { "type": "string", "operation": "notEmpty" },
+              "leftValue": "={{ $json.text || $json.transcript }}"
+            }
+          ]
+        }
+      },
+      "id": "if-transcription-ok",
+      "name": "Vérifier la transcription",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1060, 460]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Message Telegram reçu').item.json.message.chat.id }}",
+        "text": "=😕 Je n'ai pas réussi à comprendre ton message vocal. Peux-tu réessayer ou l'écrire en texte ?",
+        "additionalFields": {}
+      },
+      "id": "telegram-transcription-error",
+      "name": "Telegram: Erreur transcription",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1280, 360]
+    },
+    {
+      "parameters": {
+        "jsCode": "const isVoice = $('Message vocal ?').first().json.message.voice ? true : false;\nconst chatId = $('Message Telegram reçu').first().json.message.chat.id;\nconst today = new Date().toISOString().split('T')[0];\n\nlet userMessage;\nif (isVoice) {\n  const transcript = $input.first().json.text || $input.first().json.transcript || '';\n  userMessage = transcript;\n} else {\n  userMessage = $('Message Telegram reçu').first().json.message.text || '';\n}\n\nreturn [{ json: { userMessage, chatId, today, source: isVoice ? 'voice' : 'text' } }];"
+      },
+      "id": "merge-input",
+      "name": "Préparer le message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1060, 600]
     },
     {
       "parameters": {
         "model": "claude-sonnet-4-5",
-        "options": { "maxTokensToSample": 1024 }
+        "options": { "maxTokensToSample": 1024, "temperature": 0.3 }
       },
       "id": "lm-claude",
       "name": "Claude Sonnet 4.5",
       "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
       "typeVersion": 1.3,
-      "position": [420, 700],
+      "position": [1180, 940],
       "credentials": { "anthropicApi": { "id": "YOUR_ANTHROPIC_CREDENTIAL_ID", "name": "Anthropic account" } }
     },
     {
       "parameters": {
         "sessionIdType": "customKey",
-        "sessionKey": "={{ $('Message Telegram reçu').item.json.message.chat.id }}",
-        "contextWindowLength": 20
+        "sessionKey": "={{ $('Préparer le message').item.json.chatId }}",
+        "contextWindowLength": 25
       },
       "id": "memory",
       "name": "Mémoire de conversation",
       "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
       "typeVersion": 1.3,
-      "position": [600, 700]
+      "position": [1360, 940]
     },
     {
       "parameters": {
         "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
         "sheetName": { "__rl": true, "value": "Prospects", "mode": "name" },
         "operation": "getAllRows",
-        "toolDescription": "Consulte la liste des prospects et clients : statut (en cours, gagné, perdu), entreprise, besoin, dernier contact, nombre de relances. Utilise cet outil pour répondre à toute question sur le pipeline commercial."
+        "toolDescription": "Consulte la liste complète des prospects et clients : prénom, nom, email, entreprise, besoin, statut (en cours, gagné, perdu, max-relances), date du dernier contact, nombre de relances envoyées. Utilise cet outil pour toute question sur le pipeline commercial, le nombre de deals gagnés, ou l'état d'un prospect précis."
       },
-      "id": "tool-prospects",
+      "id": "tool-prospects-read",
       "name": "Outil: Lire Prospects",
       "type": "n8n-nodes-base.googleSheetsTool",
       "typeVersion": 4.5,
-      "position": [780, 580]
+      "position": [1540, 280]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Prospects", "mode": "name" },
+        "operation": "update",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Statut": "={{ $fromAI('statut', 'Nouveau statut du prospect : en cours, gagné, perdu, stop ou max-relances') }}",
+            "Dernier contact": "={{ $fromAI('dateContact', 'Date du jour au format AAAA-MM-JJ') }}"
+          },
+          "matchingColumns": ["Email"]
+        },
+        "toolDescription": "Met à jour le statut d'un prospect existant (ex: passer un prospect en 'gagné' ou 'perdu' suite à une décision rapportée par Anis). Utilise toujours l'email du prospect pour cibler la bonne ligne. Ne jamais utiliser sans confirmation explicite d'Anis."
+      },
+      "id": "tool-prospects-update",
+      "name": "Outil: Mettre à jour un Prospect",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [1540, 420]
     },
     {
       "parameters": {
         "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
         "sheetName": { "__rl": true, "value": "Projets", "mode": "name" },
         "operation": "getAllRows",
-        "toolDescription": "Consulte l'état des projets clients en cours : avancement (%), échéance, statut, retard éventuel. Utilise cet outil pour toute question sur l'avancement d'un projet."
+        "toolDescription": "Consulte l'état de tous les projets clients en cours : client, entreprise, nom du projet, statut, échéance, pourcentage d'avancement, date du dernier point envoyé. Utilise cet outil pour toute question sur l'avancement, les échéances ou les retards d'un projet."
       },
-      "id": "tool-projets",
+      "id": "tool-projets-read",
       "name": "Outil: Lire Projets",
       "type": "n8n-nodes-base.googleSheetsTool",
       "typeVersion": 4.5,
-      "position": [960, 580]
+      "position": [1540, 560]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Projets", "mode": "name" },
+        "operation": "update",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Avancement %": "={{ $fromAI('avancement', 'Nouveau pourcentage d\\'avancement du projet, nombre entier entre 0 et 100') }}",
+            "Dernière maj": "={{ $fromAI('dateMaj', 'Date du jour au format AAAA-MM-JJ') }}"
+          },
+          "matchingColumns": ["Email"]
+        },
+        "toolDescription": "Met à jour le pourcentage d'avancement d'un projet quand Anis te le communique (ex: 'le projet Acme est à 80% maintenant'). Cible toujours la ligne via l'email du client."
+      },
+      "id": "tool-projets-update",
+      "name": "Outil: Mettre à jour avancement Projet",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [1540, 700]
     },
     {
       "parameters": {
         "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
         "sheetName": { "__rl": true, "value": "Inbox Log", "mode": "name" },
         "operation": "getAllRows",
-        "toolDescription": "Consulte l'historique des emails reçus et classés (urgent, important, info, spam). Utilise cet outil pour des questions sur les emails du jour ou de la semaine."
+        "toolDescription": "Consulte l'historique des emails reçus et déjà classés par catégorie (urgent, important, informational, spam), avec leur langue et leur résumé. Utilise cet outil pour répondre à des questions sur les emails du jour, de la semaine, ou pour retrouver un email précis."
       },
-      "id": "tool-inbox",
+      "id": "tool-inbox-read",
       "name": "Outil: Lire Inbox Log",
       "type": "n8n-nodes-base.googleSheetsTool",
       "typeVersion": 4.5,
-      "position": [1140, 580]
+      "position": [1540, 840]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Rapports", "mode": "name" },
+        "operation": "getAllRows",
+        "toolDescription": "Consulte l'historique des rapports quotidiens déjà générés (stats prospects, stats emails, rapport IA du jour). Utilise cet outil pour comparer l'activité d'un jour à l'autre ou résumer une tendance sur plusieurs jours."
+      },
+      "id": "tool-rapports-read",
+      "name": "Outil: Lire Rapports",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [1540, 980]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Onboarding", "mode": "name" },
+        "operation": "getAllRows",
+        "toolDescription": "Consulte la liste des clients en cours d'onboarding et leur checklist (email de bienvenue envoyé, kickoff call, accès outils, premier livrable). Utilise cet outil pour des questions sur l'avancement de l'accueil d'un nouveau client."
+      },
+      "id": "tool-onboarding-read",
+      "name": "Outil: Lire Onboarding",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [1540, 1120]
+    },
+    {
+      "parameters": {
+        "name": "lister_prospects_a_relancer",
+        "description": "Identifie les prospects à relancer aujourd'hui, en appliquant la même logique de délai que le workflow de relance automatique du Jour 3 : 3 jours après le 1er contact, 5 jours après la 2ème relance, 7 jours après la 3ème, maximum 3 relances. Passe-lui le tableau JSON des prospects (lu via l'outil Lire Prospects) et la date du jour.",
+        "language": "javaScript",
+        "jsCode": "const raw = $fromAI('prospects', 'Tableau JSON des prospects à analyser, sous forme de chaîne de caractères');\nconst todayStr = $fromAI('dateDuJour', 'Date du jour au format AAAA-MM-JJ');\nlet rows;\ntry {\n  rows = JSON.parse(raw);\n} catch (e) {\n  return { error: 'JSON invalide reçu en entrée: ' + e.message };\n}\nif (!Array.isArray(rows)) rows = [rows];\n\nconst today = new Date(todayStr);\nconst delais = { 0: 3, 1: 5, 2: 7 };\nconst aRelancer = [];\n\nfor (const r of rows) {\n  const statut = r.Statut || r.statut;\n  if (statut !== 'en cours') continue;\n  const nbRelances = parseInt(r['Relances envoyées'] || r.relances || '0', 10);\n  if (nbRelances >= 3) continue;\n  const dernierContact = r['Dernier contact'] || r.dernierContact;\n  if (!dernierContact) continue;\n  const last = new Date(dernierContact);\n  const joursEcoules = Math.floor((today - last) / (1000 * 60 * 60 * 24));\n  const seuil = delais[nbRelances] ?? 7;\n  if (joursEcoules >= seuil) aRelancer.push({ ...r, joursEcoules, nbRelances });\n}\n\nreturn { total: aRelancer.length, prospects: aRelancer };"
+      },
+      "id": "tool-prospects-relance",
+      "name": "Outil: Lister Prospects à Relancer",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [1760, 100]
+    },
+    {
+      "parameters": {
+        "name": "lister_projets_en_retard",
+        "description": "Identifie les projets en cours dont l'échéance est dépassée, en appliquant la même logique que le workflow de suivi hebdomadaire du Jour 6. Passe-lui le tableau JSON des projets (lu via l'outil Lire Projets) et la date du jour.",
+        "language": "javaScript",
+        "jsCode": "const raw = $fromAI('projets', 'Tableau JSON des projets à analyser, sous forme de chaîne de caractères');\nconst todayStr = $fromAI('dateDuJour', 'Date du jour au format AAAA-MM-JJ');\nlet rows;\ntry {\n  rows = JSON.parse(raw);\n} catch (e) {\n  return { error: 'JSON invalide reçu en entrée: ' + e.message };\n}\nif (!Array.isArray(rows)) rows = [rows];\n\nconst today = new Date(todayStr);\nconst enRetard = [];\n\nfor (const r of rows) {\n  const statut = r.Statut || r.statut;\n  if (statut !== 'en cours') continue;\n  const echeanceStr = r['Échéance'] || r.echeance;\n  if (!echeanceStr) continue;\n  const echeance = new Date(echeanceStr);\n  if (echeance < today) {\n    const joursRetard = Math.ceil((today - echeance) / (1000 * 60 * 60 * 24));\n    enRetard.push({ ...r, joursRetard });\n  }\n}\n\nreturn { total: enRetard.length, projets: enRetard };"
+      },
+      "id": "tool-projets-retard",
+      "name": "Outil: Lister Projets en Retard",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [1760, 820]
+    },
+    {
+      "parameters": {
+        "name": "lister_onboarding_en_attente",
+        "description": "Identifie les clients dont l'onboarding n'est pas terminé (étape de la checklist manquante : email de bienvenue, kickoff call, accès outils ou premier livrable). Passe-lui le tableau JSON lu via l'outil Lire Onboarding.",
+        "language": "javaScript",
+        "jsCode": "const raw = $fromAI('onboarding', 'Tableau JSON des lignes Onboarding à analyser, sous forme de chaîne de caractères');\nlet rows;\ntry {\n  rows = JSON.parse(raw);\n} catch (e) {\n  return { error: 'JSON invalide reçu en entrée: ' + e.message };\n}\nif (!Array.isArray(rows)) rows = [rows];\n\nconst etapes = ['Email de bienvenue', 'Kickoff call', 'Accès outils', 'Premier livrable'];\nconst enAttente = [];\n\nfor (const r of rows) {\n  const manquantes = etapes.filter((etape) => {\n    const val = (r[etape] || '').toString().toLowerCase();\n    return val !== 'oui' && val !== 'true' && val !== '1';\n  });\n  if (manquantes.length > 0) enAttente.push({ ...r, etapesManquantes: manquantes });\n}\n\nreturn { total: enAttente.length, clients: enAttente };"
+      },
+      "id": "tool-onboarding-pending",
+      "name": "Outil: Lister Onboarding en Attente",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [1760, 1000]
+    },
+    {
+      "parameters": {
+        "name": "preparer_digest_hebdomadaire",
+        "description": "Compile un mini-digest à partir des prospects, projets et emails que tu lui passes (issus des autres outils de lecture) : nombre de deals gagnés, projets actifs, emails urgents. Utilise-le quand Anis demande un résumé global plutôt qu'une donnée isolée.",
+        "language": "javaScript",
+        "jsCode": "const prospectsRaw = $fromAI('prospects', 'Tableau JSON des prospects, sous forme de chaîne de caractères, ou chaîne vide si non disponible');\nconst projetsRaw = $fromAI('projets', 'Tableau JSON des projets, sous forme de chaîne de caractères, ou chaîne vide si non disponible');\nconst inboxRaw = $fromAI('inbox', \"Tableau JSON des emails de l'Inbox Log, sous forme de chaîne de caractères, ou chaîne vide si non disponible\");\n\nfunction safeParse(raw) {\n  if (!raw) return [];\n  try {\n    const parsed = JSON.parse(raw);\n    return Array.isArray(parsed) ? parsed : [parsed];\n  } catch (e) {\n    return [];\n  }\n}\n\nconst prospects = safeParse(prospectsRaw);\nconst projets = safeParse(projetsRaw);\nconst inbox = safeParse(inboxRaw);\n\nconst dealsGagnes = prospects.filter((p) => (p.Statut || p.statut) === 'gagné').length;\nconst projetsActifs = projets.filter((p) => (p.Statut || p.statut) === 'en cours').length;\nconst emailsUrgents = inbox.filter((e) => (e.Categorie || e.categorie) === 'urgent').length;\n\nreturn { dealsGagnes, projetsActifs, emailsUrgents };"
+      },
+      "id": "tool-weekly-digest",
+      "name": "Outil: Préparer Digest Hebdomadaire",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [1760, 1180]
+    },
+    {
+      "parameters": {
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Prospects", "mode": "name" },
+        "operation": "append",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Prénom": "={{ $fromAI('prenom', 'Prénom du nouveau prospect') }}",
+            "Nom": "={{ $fromAI('nom', 'Nom du nouveau prospect') }}",
+            "Email": "={{ $fromAI('email', 'Adresse email du nouveau prospect') }}",
+            "Entreprise": "={{ $fromAI('entreprise', 'Entreprise du nouveau prospect, optionnel') }}",
+            "Besoin": "={{ $fromAI('besoin', 'Besoin exprimé par le prospect') }}",
+            "Statut": "en cours",
+            "Dernier contact": "={{ $fromAI('dateContact', 'Date du jour au format AAAA-MM-JJ') }}",
+            "Relances envoyées": "0"
+          }
+        },
+        "toolDescription": "Crée un nouveau prospect dans le CRM quand Anis te le décrit en chat (ex: 'ajoute un prospect : Karim, karim@acme.com, a besoin d'un site e-commerce'). Initialise toujours le statut à 'en cours' et les relances à 0."
+      },
+      "id": "tool-create-prospect",
+      "name": "Outil: Créer un Prospect",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [1980, 100]
+    },
+    {
+      "parameters": {
+        "name": "calculer_statistiques",
+        "description": "Calcule des statistiques agrégées (totaux, pourcentages, moyennes) à partir d'un tableau JSON de données (prospects, projets ou emails) que tu lui passes en paramètre. Utilise cet outil après avoir lu des données via un autre outil, quand la question demande un calcul (taux de conversion, moyenne d'avancement, etc.) plutôt qu'une simple liste.",
+        "language": "javaScript",
+        "jsCode": "const raw = $fromAI('donnees', 'Tableau JSON des lignes à analyser, sous forme de chaîne de caractères');\nlet rows;\ntry {\n  rows = JSON.parse(raw);\n} catch (e) {\n  return { error: 'JSON invalide reçu en entrée: ' + e.message };\n}\nif (!Array.isArray(rows)) rows = [rows];\n\nconst total = rows.length;\nconst statutCounts = {};\nfor (const r of rows) {\n  const s = r.Statut || r.statut || 'inconnu';\n  statutCounts[s] = (statutCounts[s] || 0) + 1;\n}\n\nreturn { total, repartitionParStatut: statutCounts };"
+      },
+      "id": "tool-stats",
+      "name": "Outil: Calculer des Statistiques",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.1,
+      "position": [1760, 280]
     },
     {
       "parameters": {
@@ -81,42 +331,54 @@
         "sendTo": "={{ $fromAI('to', 'Adresse email du destinataire') }}",
         "subject": "={{ $fromAI('subject', 'Objet de l\\'email') }}",
         "message": "={{ $fromAI('body', 'Corps de l\\'email en texte') }}",
-        "toolDescription": "Envoie un email réel via Gmail. N'utilise cet outil que si l'utilisateur demande explicitement d'envoyer ou de relancer un email (ex: 'relance Karim maintenant')."
+        "options": {},
+        "toolDescription": "Envoie un email réel via Gmail. N'utilise cet outil que si Anis demande explicitement d'envoyer ou de relancer un email (ex: 'relance Karim maintenant', 'envoie un récap à ce client'). Ne jamais envoyer sans demande claire."
       },
       "id": "tool-gmail",
       "name": "Outil: Envoyer Email",
       "type": "n8n-nodes-base.gmailTool",
       "typeVersion": 2.1,
-      "position": [1320, 580]
+      "position": [1760, 460]
     },
     {
       "parameters": {
         "chatId": "YOUR_TELEGRAM_CHAT_ID",
-        "text": "={{ $fromAI('alertText', 'Message d\\'alerte urgent à envoyer à Anis') }}",
-        "toolDescription": "Envoie une alerte Telegram directement à Anis (pas dans la conversation en cours) quand une situation nécessite une intervention humaine urgente : client très mécontent, projet gravement en retard, gros deal à risque."
+        "text": "={{ $fromAI('alertText', 'Message d\\'alerte urgent à envoyer à Anis, clair et concis') }}",
+        "additionalFields": {},
+        "toolDescription": "Envoie une alerte Telegram directe à Anis, séparée de la conversation en cours, quand une situation nécessite une intervention humaine urgente : client très mécontent, projet gravement en retard, gros deal à risque de tomber à l'eau. À utiliser avec parcimonie."
       },
       "id": "tool-escalate",
       "name": "Outil: Alerter Anis",
       "type": "n8n-nodes-base.telegramTool",
       "typeVersion": 1.2,
-      "position": [1500, 580]
+      "position": [1760, 640]
     },
     {
       "parameters": {
         "promptType": "define",
-        "text": "={{ $json.message.text }}",
-        "systemMessage": "Tu es le Copilote Business IA d'Anis Khelifi, développeur full-stack freelance. Tu as accès en temps réel à son CRM (prospects), ses projets clients, sa boîte mail classée, et tu peux envoyer des emails ou l'alerter en urgence.\n\nTon rôle : répondre à ses questions sur son business et exécuter des actions simples quand il te le demande clairement (ex: 'relance Karim', 'envoie un mail à X').\n\nRègles :\n- Réponds toujours en français, de façon concise et directe (style chat, pas d'email formel sauf si tu rédiges un email).\n- Utilise les outils Sheets pour TOUTE question chiffrée (ne jamais inventer de chiffres).\n- N'envoie un email ou une alerte que si c'est explicitement demandé ou clairement nécessaire — jamais par défaut.\n- Si une info manque dans les Sheets, dis-le clairement plutôt que d'inventer.\n- Tu gardes le contexte de la conversation grâce à ta mémoire.",
+        "text": "={{ $json.userMessage }}",
+        "systemMessage": "Tu es le Copilote Business IA d'Anis Khelifi, développeur full-stack freelance basé à Alger (Next.js, Supabase, n8n, WhatsApp Business API). On est le {{ $json.today }}.\n\nTu as accès en temps réel à :\n- son CRM prospects (statut, relances, besoin)\n- ses projets clients (avancement, échéances)\n- sa boîte mail déjà triée (urgent / important / info / spam)\n- l'historique de ses rapports quotidiens\n- le suivi d'onboarding de ses nouveaux clients\n\nEt tu peux agir : envoyer un email réel, mettre à jour un statut prospect ou projet, ou alerter Anis en urgence.\n\nRègles strictes :\n1. Réponds toujours en français, de façon concise et directe — c'est un chat, pas un email formel.\n2. Pour TOUTE question chiffrée (combien, quel pourcentage, qui est en retard), utilise les outils Sheets pour obtenir les vraies données. Ne jamais inventer un chiffre.\n3. Pour les calculs (moyennes, taux, répartitions), passe les données lues à l'outil 'calculer_statistiques' plutôt que de calculer toi-même de tête.\n4. N'envoie un email, ne mets à jour un statut, ou n'alerte Anis QUE si c'est explicitement demandé ou la situation l'exige clairement. Dans le doute, demande confirmation avant d'agir.\n5. Si une information manque dans les Sheets, dis-le clairement plutôt que de combler avec une supposition.\n6. Tu gardes le contexte des échanges précédents grâce à ta mémoire de conversation — n'hésite pas à t'y référer.",
         "options": {}
       },
       "id": "agent-main",
       "name": "Copilote Business IA",
       "type": "@n8n/n8n-nodes-langchain.agent",
       "typeVersion": 1.9,
-      "position": [780, 460]
+      "position": [1320, 600]
     },
     {
       "parameters": {
-        "chatId": "={{ $('Message Telegram reçu').item.json.message.chat.id }}",
+        "jsCode": "let output = $input.first().json.output || '';\n\nif (output.length > 4000) {\n  output = output.slice(0, 3990) + '… (réponse tronquée)';\n}\n\nreturn [{ json: { ...$input.first().json, output } }];"
+      },
+      "id": "format-output",
+      "name": "Formater la réponse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 600]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Préparer le message').item.json.chatId }}",
         "text": "={{ $json.output }}",
         "additionalFields": {}
       },
@@ -124,32 +386,133 @@
       "name": "Répondre sur Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1700, 460]
+      "position": [2220, 600],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {},
+      "id": "trigger-error",
+      "name": "En cas d'erreur",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [180, 1280]
     },
     {
       "parameters": {
-        "content": "## Copilote Business IA — le workflow final\n### by Anis Khelifi\n\nLa différence avec les 6 jours précédents : ici, ce n'est plus un simple appel API à Claude — c'est un vrai **AI Agent** avec mémoire de conversation ET accès à 5 outils qu'il choisit d'utiliser lui-même selon la question.\n\nTu lui écris sur Telegram :\n• \"Où en est le projet Acme ?\"\n• \"Combien de prospects gagnés cette semaine ?\"\n• \"Relance Karim maintenant\"\n• \"Résume mes emails urgents du jour\"\n\nIl va chercher dans Sheets, raisonne, et répond ou agit.\n\n⚠️ Credentials à configurer :\n- Anthropic API (Chat Model)\n- Google Sheets OAuth2 (x3 outils)\n- Gmail OAuth2 (outil email)\n- Telegram Bot (trigger + 2 sorties)\n\nC'est le point d'orchestration de toute la semaine : Jour 2 (Inbox), Jour 3 (Relances), Jour 5 (Onboarding), Jour 6 (Projets) deviennent des données que l'agent consulte et utilise en temps réel.",
-        "width": 460,
-        "height": 360,
-        "color": 4
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=⚠️ Le Copilote Business IA a rencontré une erreur\n\nWorkflow : {{ $json.workflow.name }}\nNode en erreur : {{ $json.execution.error.node?.name || 'inconnu' }}\nMessage : {{ $json.execution.error.message }}\n\n👉 Vérifie l'exécution dans n8n.",
+        "additionalFields": {}
       },
-      "id": "note",
-      "name": "Sticky Note",
+      "id": "telegram-error-notify",
+      "name": "Telegram: Notifier l'erreur",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [400, 1280]
+    },
+    {
+      "parameters": {
+        "content": "## 1. Entrée — texte ou vocal\n\nLe bot Telegram accepte aussi bien un message écrit qu'un message vocal (comme le Jour 1).\n\nSi c'est un vocal : téléchargement du fichier puis transcription via le service STT de ton choix (Whisper API, AssemblyAI...) — remplace `YOUR_TRANSCRIPTION_SERVICE_URL`. Si la transcription échoue ou est vide, le bot répond directement sans solliciter l'agent.\n\nLe node 'Préparer le message' unifie tout en un seul champ `userMessage` + la date du jour, peu importe la source.",
+        "width": 420,
+        "height": 260,
+        "color": 5
+      },
+      "id": "note-input",
+      "name": "Sticky Note - Entrée",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [120, 80]
+      "position": [180, 280]
+    },
+    {
+      "parameters": {
+        "content": "## 2. Le cœur — AI Agent\n\nLa vraie différence avec les 6 jours précédents : ici Claude ne reçoit pas un prompt figé avec un seul appel HTTP. C'est un **AI Agent** complet qui :\n\n- garde la mémoire de la conversation par utilisateur Telegram\n- décide LUI-MÊME quel(s) outil(s) appeler selon la question\n- peut enchaîner plusieurs appels d'outils avant de répondre (ex: lire Projets PUIS calculer des stats)\n- peut agir réellement (email, mise à jour Sheets, alerte) si c'est justifié\n\n13 outils connectés : 7 lectures/listes Sheets, 3 écritures Sheets, 2 outils de calcul (stats + digest), 1 envoi email, 1 alerte Telegram.",
+        "width": 460,
+        "height": 320,
+        "color": 4
+      },
+      "id": "note-agent",
+      "name": "Sticky Note - Agent",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1280, 100]
+    },
+    {
+      "parameters": {
+        "content": "## 3. Installation — credentials requis\n\n- Anthropic API (Chat Model)\n- Google Sheets OAuth2 (10 outils de lecture/écriture)\n- Gmail OAuth2 (outil d'envoi)\n- Telegram Bot (trigger + 3 sorties : réponse, alerte, erreurs)\n- Un service de transcription audio si tu utilises les messages vocaux\n\nPlaceholders à remplacer :\nYOUR_GOOGLE_SHEET_ID · YOUR_TELEGRAM_CHAT_ID ·\nYOUR_ANTHROPIC_CREDENTIAL_ID · YOUR_TRANSCRIPTION_SERVICE_URL\n\nCe workflow orchestre les données des Jours 2 (Inbox), 3 (Prospects), 5 (Onboarding) et 6 (Projets) — utilise le même Google Sheet pour tous.",
+        "width": 460,
+        "height": 320,
+        "color": 6
+      },
+      "id": "note-install",
+      "name": "Sticky Note - Installation",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1980, 1360]
+    },
+    {
+      "parameters": {
+        "content": "## 4. Outils avancés — l'agent va plus loin\n\nAu-delà de la simple lecture/écriture, plusieurs outils reproduisent la logique métier des workflows précédents directement dans la conversation :\n\n- 'Lister Prospects à Relancer' (logique du Jour 3)\n- 'Lister Projets en Retard' (logique du Jour 6)\n- 'Lister Onboarding en Attente' (checklist du Jour 5)\n- 'Préparer Digest Hebdomadaire' (mini Jour 4 à la demande)\n- 'Créer un Prospect' pour ajouter un lead direct depuis le chat\n\nL'agent choisit lequel appeler selon ta question, sans que tu aies besoin de connaître la structure des données.",
+        "width": 460,
+        "height": 300,
+        "color": 3
+      },
+      "id": "note-advanced-tools",
+      "name": "Sticky Note - Outils avancés",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [1760, 1380]
+    },
+    {
+      "parameters": {
+        "content": "## 5. Robustesse — gestion des erreurs\n\n- Si la transcription du vocal échoue ou renvoie un texte vide, le bot répond immédiatement avec un message clair au lieu de planter ou d'envoyer une requête vide à l'agent.\n- Un Error Trigger dédié capture toute erreur d'exécution du workflow (timeout API, credential expiré...) et alerte Anis sur Telegram avec le node fautif et le message d'erreur, pour un debug rapide.\n- La réponse finale de l'agent est tronquée à 4000 caractères avant l'envoi Telegram (limite de l'API Telegram à 4096).",
+        "width": 420,
+        "height": 280,
+        "color": 2
+      },
+      "id": "note-errors",
+      "name": "Sticky Note - Erreurs",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [180, 1420]
     }
   ],
   "connections": {
-    "Message Telegram reçu": { "main": [[{ "node": "Copilote Business IA", "type": "main", "index": 0 }]] },
+    "Message Telegram reçu": { "main": [[{ "node": "Message vocal ?", "type": "main", "index": 0 }]] },
+    "Message vocal ?": {
+      "main": [
+        [{ "node": "Télécharger le vocal", "type": "main", "index": 0 }],
+        [{ "node": "Préparer le message", "type": "main", "index": 0 }]
+      ]
+    },
+    "Télécharger le vocal": { "main": [[{ "node": "Transcrire le vocal", "type": "main", "index": 0 }]] },
+    "Transcrire le vocal": { "main": [[{ "node": "Vérifier la transcription", "type": "main", "index": 0 }]] },
+    "Vérifier la transcription": {
+      "main": [
+        [{ "node": "Préparer le message", "type": "main", "index": 0 }],
+        [{ "node": "Telegram: Erreur transcription", "type": "main", "index": 0 }]
+      ]
+    },
+    "Préparer le message": { "main": [[{ "node": "Copilote Business IA", "type": "main", "index": 0 }]] },
     "Claude Sonnet 4.5": { "ai_languageModel": [[{ "node": "Copilote Business IA", "type": "ai_languageModel", "index": 0 }]] },
     "Mémoire de conversation": { "ai_memory": [[{ "node": "Copilote Business IA", "type": "ai_memory", "index": 0 }]] },
     "Outil: Lire Prospects": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Mettre à jour un Prospect": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
     "Outil: Lire Projets": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Mettre à jour avancement Projet": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
     "Outil: Lire Inbox Log": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Lire Rapports": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Lire Onboarding": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Calculer des Statistiques": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Lister Prospects à Relancer": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Lister Projets en Retard": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Lister Onboarding en Attente": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Préparer Digest Hebdomadaire": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
+    "Outil: Créer un Prospect": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
     "Outil: Envoyer Email": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
     "Outil: Alerter Anis": { "ai_tool": [[{ "node": "Copilote Business IA", "type": "ai_tool", "index": 0 }]] },
-    "Copilote Business IA": { "main": [[{ "node": "Répondre sur Telegram", "type": "main", "index": 0 }]] }
+    "Copilote Business IA": { "main": [[{ "node": "Formater la réponse", "type": "main", "index": 0 }]] },
+    "Formater la réponse": { "main": [[{ "node": "Répondre sur Telegram", "type": "main", "index": 0 }]] },
+    "En cas d'erreur": { "main": [[{ "node": "Telegram: Notifier l'erreur", "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1", "saveManualExecutions": true },
   "meta": { "instanceId": "copilote-business-anis-v1" }

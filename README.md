@@ -20,7 +20,7 @@ Je suis **Anis Khelifi**, développeur full-stack et spécialiste en automatisat
 | 3 | Relances Clients Automatiques | Relances Gmail personnalisées par Claude — délai intelligent, max 3 tentatives, notification Telegram |
 | 4 | Rapport Quotidien IA | Synthèse automatique chaque soir — pipeline prospects + emails du jour + action prioritaire par Claude |
 | 5 | Onboarding Client Automatique | Email de bienvenue par Claude + fiche onboarding dès qu'un deal passe en "gagné" |
-| 6 | Suivi de projet | *(bientôt)* |
+| 6 | Suivi de Projet Client Automatique | Point d'avancement hebdo par Claude, alerte Telegram si projet en retard |
 | 7 | Veille concurrentielle | *(bientôt)* |
 
 ## ⚙️ Comment utiliser ces workflows

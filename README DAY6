@@ -1,0 +1,85 @@
+# Jour 6 — Suivi de Projet Client Automatique 📁
+
+Un workflow qui envoie chaque lundi un point d'avancement personnalisé à tous tes clients actifs, rédigé par Claude, et qui t'alerte sur Telegram dès qu'un projet dépasse son échéance.
+
+## ✨ Ce que fait ce workflow
+
+- **Déclenchement automatique** → chaque lundi à 9h
+- **Lecture des projets** → récupère tous les projets au statut `en cours` depuis Google Sheets
+- **Calcul automatique** → détecte les projets en retard (échéance dépassée) et le nombre de jours restants
+- **Point d'avancement IA (Claude)** → rédige un email hebdomadaire personnalisé par client (avancement %, prochaine étape, ton rassurant)
+- **Envoi Gmail** → directement depuis ton compte
+- **Mise à jour Sheets** → enregistre la date du dernier point envoyé
+- **Alerte Telegram intelligente** → message d'alerte prioritaire si le projet est en retard, simple confirmation sinon
+
+## 🧱 Stack utilisée
+
+- n8n (orchestration + scheduling)
+- Google Sheets (suivi des projets clients)
+- Claude claude-sonnet-4-5 via API Anthropic (rédaction du point hebdo)
+- Gmail (envoi de l'email)
+- Telegram Bot (alertes retard / confirmations)
+
+## 🚀 Installation
+
+### 1. Importer le workflow
+Dans n8n : nouveau workflow → menu **(...)** → **Import from File** → sélectionne `WORKFLOW DAY6`.
+
+### 2. Créer l'onglet "Projets"
+Dans ton Google Sheet (le même que les jours précédents), crée un onglet **"Projets"** avec ces colonnes :
+
+```
+Client | Entreprise | Email | Projet | Statut | Échéance | Avancement % | Dernière maj
+```
+
+Exemple :
+| Client | Entreprise | Email | Projet | Statut | Échéance | Avancement % | Dernière maj |
+|--------|-----------|-------|--------|--------|----------|---------------|---------------|
+| Karim | Acme | karim@acme.com | Site e-commerce | en cours | 2025-02-15 | 60 | |
+
+> Statuts possibles : `en cours`, `terminé`, `en pause` — seuls les projets `en cours` reçoivent un suivi.
+
+### 3. Remplacer les 3 placeholders
+
+| Placeholder | Valeur à renseigner |
+|-------------|---------------------|
+| `YOUR_ANTHROPIC_API_KEY` | Ta clé API Claude (console.anthropic.com) |
+| `YOUR_GOOGLE_SHEET_ID` | L'ID de ton Google Sheet (le même que les jours précédents) |
+| `YOUR_TELEGRAM_CHAT_ID` | Ton chat ID Telegram |
+
+### 4. Configurer les credentials dans n8n
+- **Google Sheets** → compte Google (OAuth2)
+- **Gmail** → compte Gmail (OAuth2)
+- **Telegram** → token du bot Telegram
+
+### 5. Activer le workflow
+Toggle en haut à droite. Le point hebdomadaire part chaque lundi à 9h.
+
+> Pour tester immédiatement : clique sur **Execute Workflow** manuellement.
+
+## 💡 Idées d'adaptation
+
+- Ajouter un récap visuel (barre de progression) dans l'email via un template HTML
+- Connecter Notion ou Trello à la place de Google Sheets pour suivre les tâches en détail
+- Ajouter une relance automatique si le client ne répond pas à 2 points consécutifs
+- Calculer un taux de retard global et l'inclure dans le rapport quotidien (Jour 4)
+- Permettre au client de répondre directement pour valider une étape (parsing de la réponse)
+
+## 📋 Structure du workflow
+
+```
+Schedule (lundi 9h)
+  → Lire Projets (Sheets)
+    → Filtrer "en cours"
+      → [Oui] Claude: rédiger le point hebdo
+                → Gmail: envoyer
+                  → Sheets: mettre à jour "Dernière maj"
+                    → En retard ? → [Oui] Telegram: alerte prioritaire
+                                   → [Non] Telegram: confirmation simple
+      → [Non]  Telegram: rien à faire cette semaine
+```
+
+## ⚠️ Notes
+
+- Ce workflow s'appuie sur le même Google Sheet que les jours précédents — ajoute simplement l'onglet "Projets".
+- Les clés API ne sont pas incluses — ajoute les tiennes.

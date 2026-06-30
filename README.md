@@ -19,8 +19,8 @@ Je suis **Anis Khelifi**, développeur full-stack et spécialiste en automatisat
 | 2 | Smart Inbox Classifier | Triage Gmail par Claude — catégorisation, résumé multilingue, alerte Telegram urgente |
 | 3 | Relances Clients Automatiques | Relances Gmail personnalisées par Claude — délai intelligent, max 3 tentatives, notification Telegram |
 | 4 | Rapport Quotidien IA | Synthèse automatique chaque soir — pipeline prospects + emails du jour + action prioritaire par Claude |
-| 5 | Rapports quotidiens | *(bientôt)* |
-| 6 | Onboarding client | *(bientôt)* |
+| 5 | Onboarding Client Automatique | Email de bienvenue par Claude + fiche onboarding dès qu'un deal passe en "gagné" |
+| 6 | Suivi de projet | *(bientôt)* |
 | 7 | Veille concurrentielle | *(bientôt)* |
 
 ## ⚙️ Comment utiliser ces workflows

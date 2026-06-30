@@ -1,0 +1,86 @@
+# Jour 5 — Onboarding Client Automatique 🎉
+
+Un workflow qui détecte automatiquement chaque nouveau client gagné dans ton CRM, lui envoie un email de bienvenue personnalisé par Claude, crée sa fiche d'onboarding, et te notifie pour planifier le kickoff.
+
+## ✨ Ce que fait ce workflow
+
+- **Surveillance automatique** → vérifie toutes les 30 minutes (9h-19h, lun-ven) si un prospect vient de passer en statut `gagné`
+- **Anti-doublon** → ne traite chaque client qu'une seule fois grâce à la colonne `Onboarding envoyé`
+- **Email de bienvenue IA (Claude)** → personnalisé selon le prénom, l'entreprise et le besoin du client, avec les prochaines étapes du projet
+- **Envoi Gmail** → directement depuis ton compte
+- **Fiche Onboarding** → créée automatiquement dans un onglet dédié avec une checklist (kickoff call, accès outils, premier livrable)
+- **Notification Telegram** → te prévient instantanément avec l'action suivante à faire (planifier le kickoff)
+
+## 🧱 Stack utilisée
+
+- n8n (orchestration + scheduling)
+- Google Sheets (Prospects CRM + Onboarding)
+- Claude claude-sonnet-4-5 via API Anthropic (rédaction email de bienvenue)
+- Gmail (envoi de l'email)
+- Telegram Bot (notification)
+
+## 🚀 Installation
+
+### 1. Importer le workflow
+Dans n8n : nouveau workflow → menu **(...)** → **Import from File** → sélectionne `WORKFLOW DAY5`.
+
+### 2. Ajouter une colonne dans l'onglet "Prospects"
+Si tu utilises déjà l'onglet Prospects du Jour 3, ajoute simplement la colonne :
+
+```
+Onboarding envoyé
+```
+(laisse-la vide par défaut — le workflow la remplit avec `oui` après traitement)
+
+### 3. Créer l'onglet "Onboarding"
+Nouvel onglet dans le même Google Sheet, avec les colonnes :
+
+```
+Date | Client | Entreprise | Email | Étape 1 | Étape 2 | Étape 3 | Étape 4
+```
+
+### 4. Remplacer les 3 placeholders
+
+| Placeholder | Valeur à renseigner |
+|-------------|---------------------|
+| `YOUR_ANTHROPIC_API_KEY` | Ta clé API Claude (console.anthropic.com) |
+| `YOUR_GOOGLE_SHEET_ID` | L'ID de ton Google Sheet (le même que Jour 3 et 4) |
+| `YOUR_TELEGRAM_CHAT_ID` | Ton chat ID Telegram |
+
+### 5. Configurer les credentials dans n8n
+- **Google Sheets** → compte Google (OAuth2)
+- **Gmail** → compte Gmail (OAuth2)
+- **Telegram** → token du bot Telegram
+
+### 6. Activer le workflow
+Toggle en haut à droite. Dès qu'un prospect passe en `gagné` dans ton Sheet, l'onboarding se lance dans les 30 minutes max.
+
+> Pour tester immédiatement : passe un prospect en statut `gagné` puis clique sur **Execute Workflow**.
+
+## 💡 Idées d'adaptation
+
+- Ajouter la création automatique d'un dossier Google Drive partagé pour le client
+- Connecter Notion pour générer un espace de travail client automatiquement
+- Ajouter un Calendly/lien de réservation dans l'email pour planifier le kickoff directement
+- Envoyer un deuxième email de suivi 3 jours après l'onboarding
+- Créer un channel Slack/Telegram dédié au projet automatiquement
+
+## 📋 Structure du workflow
+
+```
+Schedule (30 min, 9h-19h lun-ven)
+  → Lire Prospects (Sheets)
+    → Détecter statut "gagné" + non onboardé
+      → [Oui] Claude: rédiger email de bienvenue
+                → Gmail: envoyer
+                  → Sheets: créer fiche Onboarding
+                    → Sheets: marquer "Onboarding envoyé"
+                      → Telegram: notifier
+      → [Non]  Telegram: rien à faire
+```
+
+## ⚠️ Notes
+
+- Ce workflow s'appuie sur l'onglet Prospects créé au Jour 3 — utilise le même Google Sheet.
+- La colonne `Onboarding envoyé` évite d'envoyer plusieurs fois le même email de bienvenue.
+- Les clés API ne sont pas incluses — ajoute les tiennes.

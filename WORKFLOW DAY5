@@ -1,0 +1,217 @@
+{
+  "name": "Onboarding Client Automatique — Claude + Gmail + Sheets (by Anis Khelifi)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "*/30 9-19 * * 1-5" }]
+        }
+      },
+      "id": "trigger-schedule",
+      "name": "Toutes les 30 min (9h-19h, lun-ven)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 400]
+    },
+    {
+      "parameters": {
+        "operation": "readAllRows",
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Prospects", "mode": "name" },
+        "options": {}
+      },
+      "id": "read-prospects",
+      "name": "Lire Prospects",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [420, 400],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all();\nconst nouveaux = [];\n\nfor (const row of rows) {\n  const d = row.json;\n  if (d.Statut === 'gagné' && d['Onboarding envoyé'] !== 'oui') {\n    nouveaux.push({ json: { ...d, rowIndex: d.__rowIndex } });\n  }\n}\n\nif (nouveaux.length === 0) return [{ json: { skip: true, message: 'Aucun nouveau client à onboarder.' } }];\nreturn nouveaux;"
+      },
+      "id": "filter-new-clients",
+      "name": "Détecter nouveaux clients gagnés",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [640, 400]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "version": 2, "caseSensitive": true, "typeValidation": "strict" },
+          "combinator": "and",
+          "conditions": [
+            {
+              "operator": { "type": "boolean", "operation": "false" },
+              "leftValue": "={{ $json.skip }}"
+            }
+          ]
+        }
+      },
+      "id": "if-has-new-client",
+      "name": "Y a-t-il un nouveau client ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [860, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "YOUR_ANTHROPIC_API_KEY" },
+            { "name": "anthropic-version", "value": "2023-06-01" },
+            { "name": "content-type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-5\",\n  \"max_tokens\": 600,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": {{ JSON.stringify(\"Tu es Anis Khelifi, développeur full-stack freelance. Un prospect vient de devenir client. Rédige un email de bienvenue chaleureux et professionnel qui : 1) le remercie pour sa confiance, 2) présente les 3-4 prochaines étapes du projet (kickoff call, accès aux outils, premiers livrables), 3) donne un ton rassurant et pro. Dans la langue du client si connue, sinon en français. Réponds UNIQUEMENT avec le corps de l'email en texte brut, pas d'objet, signe 'Anis'.\\n\\nClient:\\n- Prénom: \" + ($json.Prénom || 'Client') + \"\\n- Entreprise: \" + ($json.Entreprise || 'son entreprise') + \"\\n- Besoin / projet: \" + ($json.Besoin || 'non précisé') ) }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "claude-welcome",
+      "name": "Claude: Rédiger email de bienvenue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1080, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "jsCode": "const client = $('Détecter nouveaux clients gagnés').first().json;\nconst aiRaw = $input.first().json;\nconst body = aiRaw.content?.[0]?.text || '';\nreturn [{ json: {\n  ...client,\n  emailBody: body,\n  subject: `Bienvenue ${client.Entreprise || ''} — Démarrons votre projet 🚀`,\n  onboardingStartedAt: new Date().toISOString()\n} }];"
+      },
+      "id": "build-welcome-email",
+      "name": "Construire l'email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1300, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.Email }}",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.emailBody }}",
+        "options": {}
+      },
+      "id": "send-welcome-email",
+      "name": "Gmail: Envoyer email bienvenue",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1520, 300],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Onboarding", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date": "={{ $json.onboardingStartedAt }}",
+            "Client": "={{ $json.Prénom }} {{ $json.Nom || '' }}",
+            "Entreprise": "={{ $json.Entreprise }}",
+            "Email": "={{ $json.Email }}",
+            "Étape 1": "Email de bienvenue envoyé",
+            "Étape 2": "À faire : planifier le kickoff call",
+            "Étape 3": "À faire : envoyer accès aux outils",
+            "Étape 4": "À faire : premier livrable"
+          }
+        },
+        "options": {}
+      },
+      "id": "create-onboarding-row",
+      "name": "Créer fiche Onboarding",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1740, 300],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": { "__rl": true, "value": "YOUR_GOOGLE_SHEET_ID", "mode": "id" },
+        "sheetName": { "__rl": true, "value": "Prospects", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Onboarding envoyé": "oui"
+          },
+          "matchingColumns": ["Email"]
+        },
+        "options": {}
+      },
+      "id": "mark-onboarded",
+      "name": "Marquer comme onboardé",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [1960, 300],
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=🎉 NOUVEAU CLIENT ONBOARDÉ\n\n👤 {{ $json.Prénom }} {{ $json.Nom || '' }} — {{ $json.Entreprise || 'N/A' }}\n📧 {{ $json.Email }}\n📝 Projet : {{ $json.Besoin || 'non précisé' }}\n\n✅ Email de bienvenue envoyé\n✅ Fiche onboarding créée\n\n👉 Prochaine étape : planifier le kickoff call",
+        "additionalFields": {}
+      },
+      "id": "telegram-notify",
+      "name": "Telegram: Notifier",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2180, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_TELEGRAM_CHAT_ID",
+        "text": "=🔍 Vérification onboarding — aucun nouveau client gagné pour le moment.",
+        "additionalFields": {}
+      },
+      "id": "telegram-skip",
+      "name": "Telegram: Rien à faire",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1080, 520]
+    },
+    {
+      "parameters": {
+        "content": "## Onboarding Client Automatique\n### by Anis Khelifi\n\nDès qu'un prospect passe en statut 'gagné' dans Sheets (toutes les 30 min, 9h-19h lun-ven) :\n1. Claude rédige un email de bienvenue personnalisé\n2. Gmail envoie l'email au client\n3. Une fiche Onboarding est créée avec checklist\n4. Le prospect est marqué 'Onboarding envoyé' (anti-doublon)\n5. Notification Telegram avec next step\n\nColonne à ajouter dans l'onglet Prospects :\n'Onboarding envoyé' (oui / vide)",
+        "width": 400,
+        "height": 280,
+        "color": 6
+      },
+      "id": "note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [120, 100]
+    }
+  ],
+  "connections": {
+    "Toutes les 30 min (9h-19h, lun-ven)": { "main": [[{ "node": "Lire Prospects", "type": "main", "index": 0 }]] },
+    "Lire Prospects": { "main": [[{ "node": "Détecter nouveaux clients gagnés", "type": "main", "index": 0 }]] },
+    "Détecter nouveaux clients gagnés": { "main": [[{ "node": "Y a-t-il un nouveau client ?", "type": "main", "index": 0 }]] },
+    "Y a-t-il un nouveau client ?": {
+      "main": [
+        [{ "node": "Claude: Rédiger email de bienvenue", "type": "main", "index": 0 }],
+        [{ "node": "Telegram: Rien à faire", "type": "main", "index": 0 }]
+      ]
+    },
+    "Claude: Rédiger email de bienvenue": { "main": [[{ "node": "Construire l'email", "type": "main", "index": 0 }]] },
+    "Construire l'email": { "main": [[{ "node": "Gmail: Envoyer email bienvenue", "type": "main", "index": 0 }]] },
+    "Gmail: Envoyer email bienvenue": { "main": [[{ "node": "Créer fiche Onboarding", "type": "main", "index": 0 }]] },
+    "Créer fiche Onboarding": { "main": [[{ "node": "Marquer comme onboardé", "type": "main", "index": 0 }]] },
+    "Marquer comme onboardé": { "main": [[{ "node": "Telegram: Notifier", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "meta": { "instanceId": "onboarding-client-anis-v1" }
+}

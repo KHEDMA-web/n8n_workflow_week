@@ -8,12 +8,12 @@
 
 ## POST 1 — Sécurité Node.js ✏️
 
-**Une faille de sécurité m'a coûté $4,200 en une nuit. Voilà les 5 protections que j'avais négligées.**
+**Une faille de sécurité m'a coûté $700 en une nuit. Voilà les 5 protections que j'avais négligées.**
 
 Lundi. 3h17. 40 000 requêtes sur `/login` en 10 minutes.
 Bot de credential stuffing. Comptes clients compromis. Remboursements. Perte de contrats.
 
-Bilan final : $4,200 de pertes directes + 3 jours à gérer la crise au lieu de builder.
+Bilan final : $700 de pertes directes + 3 jours à gérer la crise au lieu de builder.
 Cause : des protections que j'avais procrastiné depuis des semaines.
 
 Voilà les 5 lignes de code qui auraient tout évité :
@@ -39,7 +39,7 @@ Un middleware global catch tout et retourne : `{ error: "Une erreur est survenue
 `process.env.DATABASE_URL` absent → l'app démarre quand même et plante 10 min plus tard en prod.
 Zod sur l'objet `env` au boot : si une var manque, l'app refuse de démarrer. Visible en CI, pas devant les clients.
 
-$4,200 de pertes pour 30 minutes de mise en place.
+$700 de pertes pour 30 minutes de mise en place.
 Ne fais pas la même erreur.
 
 Lequel de ces 5 tu n'as pas encore ? ↓

@@ -8,12 +8,15 @@
 
 ## POST 1 — Sécurité Node.js ✏️
 
-**Mon API s'est fait spammer à 3h du matin. Voilà les 5 protections que j'avais pas mises en place.**
+**Une faille de sécurité m'a coûté $4,200 en une nuit. Voilà les 5 protections que j'avais négligées.**
 
-Lundi. 3h17. Alerte : 40 000 requêtes en 10 minutes sur `/login`.
-Pas de rate limiting. Pas de ban automatique. Juste moi, le café, et la panique.
+Lundi. 3h17. 40 000 requêtes sur `/login` en 10 minutes.
+Bot de credential stuffing. Comptes clients compromis. Remboursements. Perte de contrats.
 
-Depuis ce soir-là, ces 5 règles sont non-négociables sur tous mes projets :
+Bilan final : $4,200 de pertes directes + 3 jours à gérer la crise au lieu de builder.
+Cause : des protections que j'avais procrastiné depuis des semaines.
+
+Voilà les 5 lignes de code qui auraient tout évité :
 
 **1. Rate limiting par IP sur toutes les routes sensibles**
 `/login`, `/register`, `/forgot-password` → max 10 req/15 min par IP.
@@ -33,10 +36,12 @@ Zod sur chaque body, chaque param, chaque query : `z.string().email().max(255)`.
 Un middleware global catch tout et retourne : `{ error: "Une erreur est survenue" }`. C'est tout.
 
 **5. Variables d'environnement validées au démarrage**
-`process.env.DATABASE_URL` absent → ton app démarre quand même et plante 10 minutes plus tard en prod.
-→ Zod sur ton objet `env` au boot : si une var manque, l'app refuse de démarrer. Problème visible immédiatement.
+`process.env.DATABASE_URL` absent → l'app démarre quand même et plante 10 min plus tard en prod.
+Zod sur l'objet `env` au boot : si une var manque, l'app refuse de démarrer. Visible en CI, pas devant les clients.
 
-Tu dors mieux quand ton app est blindée.
+$4,200 de pertes pour 30 minutes de mise en place.
+Ne fais pas la même erreur.
+
 Lequel de ces 5 tu n'as pas encore ? ↓
 
 ---

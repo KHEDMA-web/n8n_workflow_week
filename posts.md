@@ -46,13 +46,15 @@ Lequel de ces 5 tu n'as pas encore ? ↓
 
 ---
 
-## POST 2 — Performance API (inchangé)
+## POST 2 — Performance API ✏️
 
-**5 choses qui ralentissent ton API Node.js (et que tu peux corriger aujourd'hui)**
+**De 800ms à 80ms : j'ai divisé par 10 le temps de réponse de mon API avec 5 changements.**
 
-Ton API répond en 800ms.
-Elle pourrait répondre en 80ms.
-Voilà ce qui la ralentit :
+800ms → 80ms.
+Même serveur. Même base de données. Même code métier.
+Juste 5 ajustements que j'aurais dû faire dès le départ.
+
+Voilà exactement ce qui a changé :
 
 **1. Tu bloques la boucle d'événements avec des tâches lourdes**
 Resize d'image, parsing CSV, envoi d'email = tout ça dans la route = API bloquée pour tout le monde.

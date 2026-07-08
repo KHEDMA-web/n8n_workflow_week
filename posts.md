@@ -397,3 +397,41 @@ Tu gères encore tout dans tes routes ? ↓
 
 _Mis à jour le 2026-07-05. Posts 1/3/4/5/6/8/9/10 réécrits avec nouveaux angles. Posts 2/7 inchangés._
 _Consulter via `git show origin/_ideas:posts.md`_
+
+---
+
+## POST 11 — SEO Technique
+
+**5 techniques SEO qui font vraiment la différence — et ce que la plupart des devs font à la place.**
+
+Le SEO technique, c'est 20% d'actions qui donnent 80% des résultats.
+Voilà les 5 qui comptent vraiment — et l'erreur classique en face de chacune.
+
+**1. SSR / SSG au lieu du CSR**
+✅ À faire : rendre le HTML côté serveur. Googlebot lit le contenu dès le premier byte.
+❌ À éviter : laisser React/Vue rendre tout côté client. Googlebot voit une page vide, attend le JS, abandonne souvent.
+→ Next.js `getStaticProps` ou `getServerSideProps`. Une modification, tout change.
+
+**2. Core Web Vitals sous les seuils Google**
+✅ À faire : LCP < 2.5s, CLS < 0.1, INP < 200ms. Ce sont les métriques que Google mesure pour ton ranking.
+❌ À éviter : optimiser le design avant les perfs. Une belle page lente est invisible sur Google.
+→ PageSpeed Insights dit exactement ce qui cloche. Commence par les images.
+
+**3. Balises méta complètes sur chaque page**
+✅ À faire : `title` unique (60 car max), `meta description` (155 car max), `og:image` 1200x630px.
+❌ À éviter : le même title sur toutes les pages, ou pire — laisser Google en générer un lui-même.
+→ `next-seo` en Next.js : une config, toutes les balises générées proprement.
+
+**4. Sitemap XML soumis à Google Search Console**
+✅ À faire : un sitemap généré automatiquement à chaque build, soumis dans GSC.
+❌ À éviter : ne pas avoir de sitemap du tout. Google découvre tes pages en crawlant les liens — lentement.
+→ `next-sitemap` : 5 minutes de setup, sitemap mis à jour à chaque déploiement.
+
+**5. Images optimisées avec alt descriptif**
+✅ À faire : WebP, lazy loading, `alt` qui décrit vraiment l'image (pas "image1.jpg").
+❌ À éviter : servir du JPEG 3MB sans compression et des `alt=""` vides.
+→ Sharp côté serveur + `next/image` : compression automatique, lazy loading natif, format WebP.
+
+Bonus : installe Google Search Console dès le premier jour. C'est gratuit et c'est la seule source de vérité sur ce que Google voit vraiment.
+
+Tu fais du Next.js sans SSR en ce moment ? ↓
